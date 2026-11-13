@@ -184,6 +184,8 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
    *Code en bloc et en ligne, bloc `^id` d'élément de liste : observés en P2 (cf. « Essai réel P2 »).*
 6. Rendu de la fenêtre d'aperçu sur mobile et en thème clair/sombre. *Desktop : observé en P2.*
 7. Délai dépassé côté plugin : notice correcte, aucune relance de `create-jira`.
+8. Bouton du ruban (ajouté avant la 0.1.0) : icône `wand-sparkles` affichée, infobulle « Refinr: Analyze note », clic
+   = même analyse que la commande, notice sans note Markdown active, icône retirée quand le plugin est désactivé.
 
 ## Phase P1 — Squelette, réglages, connexion
 
@@ -667,6 +669,46 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
 6. Première version seulement : soumission sur community.obsidian.md (cf. P0, « Soumission »).
 - Pour recommencer : `gh release delete <x.y.z> --cleanup-tag --yes` (brouillon et tag distant ; sans brouillon,
   `git push origin :refs/tags/<x.y.z>`), `git tag -d <x.y.z>`, correction, puis nouveau tag sur `main`.
+
+## Avant la 0.1.0 — Bouton du ruban (2026-11-14)
+
+### Faits vérifiés
+Sources : `obsidianmd/obsidian-developer-docs` commit `1c26772` (2026-10-21) — *Ribbon actions*, *Icons*,
+*Plugin guidelines*, *Reference/TypeScript API/Plugin/addRibbonIcon* ; `obsidian.d.ts` 1.14.4 ; gabarit
+`obsidian-sample-plugin` `07ceb81` ; `eslint-plugin-obsidianmd` 0.5.1 (code des règles dans `node_modules`).
+- **API** : `addRibbonIcon(icon: IconName, title: string, callback: (evt: MouseEvent) => any): HTMLElement`, depuis
+  0.9.7 (bien en dessous de `minAppVersion` 1.13.0) ; `title` est l'infobulle.
+- **Icône** : nom Lucide ; « Only icons up to v0.446.0 are supported at this time » (*Icons*). → **`wand-sparkles`**
+  (choix du mainteneur) : présente dans Lucide 0.446.0 (`icons/wand-sparkles.json` au tag `0.446.0`, ancien alias
+  `wand-2` déprécié).
+- **Ruban** (*Ribbon actions*) : l'utilisateur peut retirer l'icône ou masquer tout le ruban, donc la fonction doit
+  rester accessible autrement (ici la commande « Analyze note ») ; « It is also recommended that plugins do not add
+  their own toggles for ribbon items » → **aucun réglage** pour masquer le bouton, aucun menu contextuel.
+- **Nettoyage au déchargement** (*Plugin guidelines*, « Clean up resources when plugin unloads ») : utiliser les
+  méthodes du plugin qui libèrent d'elles-mêmes (`registerEvent`, `addCommand`…). `addRibbonIcon` est une méthode de
+  `Plugin` : le gabarit et l'exemple de la doc l'appellent dans `onload` sans rien faire dans `onunload`. → appel dans
+  `onload` uniquement, élément renvoyé non conservé, rien dans `onunload`. Le retrait effectif de l'icône à la
+  désactivation du plugin n'est **pas écrit noir sur blanc** dans la doc : **à confirmer à l'exécution** (essai réel).
+- **Nommage et casse** : l'infobulle suit la casse de phrase des guidelines. La règle
+  `obsidianmd/ui/sentence-case` couvre bien `addRibbonIcon` (2ᵉ argument), mais elle est **désactivée dans la
+  configuration recommandée** depuis la 0.3.0 (« reports too much ordinary text ») : notre `npm run lint` ne la
+  vérifie pas. Vérification ponctuelle (`--rule` en ligne de commande, configuration inchangée) : « Refinr: Analyze
+  note » ne déclenche rien, « Refinr: Analyze The Active Note » est signalée ; la règle signale aussi deux faux
+  positifs existants (`http://` → `HTTP://`), ce qui justifie de la laisser désactivée. Aucune règle du plugin ESLint
+  ne porte sur le nom de l'icône ni sur son nettoyage ; les règles `commands/*` (pas d'ID ni de nom du plugin dans les
+  commandes) ne s'appliquent pas au ruban. Le préfixe « Refinr: » de l'infobulle reprend celui de la palette de
+  commandes (« Refinr: Analyze note »), le ruban n'affichant pas le nom du plugin.
+
+### Décisions
+- **Même action que la commande** : `analyzeActiveNote()` (dans `main.ts`) sert à la commande et au bouton ; la
+  décision vient de `src/analyze-target.ts` (sans import d'`obsidian`, testé dans `tests/analyze-target.test.ts`) :
+  `no-note` (pas de note Markdown active), `busy` (analyse déjà en cours sur cette note), `ready`.
+- **Commande inchangée** : toujours masquée de la palette sans note Markdown active (`checkCallback`) ; même notice
+  « Refinr: {note} is already being analyzed. » (texte désormais produit par `alreadyAnalyzingMessage`).
+- **Seul ajout de comportement** (décision du mainteneur) : la commande n'avait **aucune** notice pour « pas de note
+  Markdown active » (elle est simplement indisponible). Un clic silencieux sur un bouton semblant cassé, le bouton
+  affiche « Refinr: open a Markdown note to analyze it. ».
+- Pas de CHANGELOG dans le dépôt : les notes de version sont générées à la release (`--generate-notes`).
 
 ## Dépendances
 

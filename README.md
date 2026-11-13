@@ -93,7 +93,10 @@ note above it is not sent.
 
 ### Analyze a note
 
-Open a note and run **Refinr: Analyze note** from the command palette.
+Open a note and run **Refinr: Analyze note** from the command palette, or click the Refinr button (magic wand) in
+the left ribbon: both start the same analysis of the active note. Without an active Markdown note, the button shows
+a notice; one analysis at a time runs per note. Like any ribbon icon, the button can be hidden with Obsidian's own
+ribbon options; the plugin has no setting for it.
 
 - The frontmatter is not sent. `![[embeds]]` are expanded: whole notes, `![[note#Heading]]` sections,
   `![[note#^block]]` blocks (a list item comes with all its sub-items), `![[#Heading]]` of the same note. Plain
