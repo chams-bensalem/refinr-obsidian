@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
 import { moment, Notice, Plugin, stringifyYaml, type TFile } from 'obsidian';
+import { alreadyAnalyzingMessage, analyzeTarget, isMarkdownNote } from './analyze-target';
 import { obsidianTransport } from './api/obsidian-transport';
 import { normalizeBaseUrl, RefinrClient } from './api/refinr-client';
 import {
@@ -55,15 +56,18 @@ export default class RefinrPlugin extends Plugin {
 			id: 'analyze-note',
 			name: 'Analyze note',
 			checkCallback: (checking) => {
-				const file = this.app.workspace.getActiveFile();
-				if (file === null || file.extension !== 'md') {
+				if (!isMarkdownNote(this.app.workspace.getActiveFile())) {
 					return false;
 				}
 				if (!checking) {
-					void this.analyzeNote(file);
+					this.analyzeActiveNote();
 				}
 				return true;
 			},
+		});
+		// Same action as the "Analyze note" command; Obsidian removes the icon when the plugin is unloaded
+		this.addRibbonIcon('wand-sparkles', 'Refinr: Analyze note', () => {
+			this.analyzeActiveNote();
 		});
 		this.addCommand({
 			id: 'reassess-story',
@@ -118,13 +122,23 @@ export default class RefinrPlugin extends Plugin {
 		return this.settings.analysisTimeoutSeconds * 1000;
 	}
 
+	/** "Analyze note" command and ribbon button: the active Markdown note, or a notice saying why not. */
+	private analyzeActiveNote(): void {
+		const target = analyzeTarget(this.app.workspace.getActiveFile(), this.analyzing);
+		if (target.kind === 'ready') {
+			void this.analyzeNote(target.file);
+		} else {
+			new Notice(target.message);
+		}
+	}
+
 	/**
 	 * Active note → text (frontmatter removed, embeds expanded) → size check against Refinr's limit →
 	 * `analyze-preview` → preview window, from which the issues can be created.
 	 */
 	private async analyzeNote(file: TFile): Promise<void> {
 		if (this.analyzing.has(file.path)) {
-			new Notice(`Refinr: ${file.basename} is already being analyzed.`);
+			new Notice(alreadyAnalyzingMessage(file.basename));
 			return;
 		}
 		const baseUrl = normalizeBaseUrl(this.settings.refinrUrl);
