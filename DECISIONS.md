@@ -36,8 +36,10 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   `Setting.addComponent` 1.11.0, `SecretComponent` 1.11.1, **`App.secretStorage` / `SecretStorage` 1.11.4**,
   `SecretComponent.setValue`/`onChange` 1.11.4.
 - La règle de soumission demande la version minimale **réellement compatible** (à défaut, la dernière version stable).
-- → **`minAppVersion: "1.11.4"`**, imposée par `SecretStorage`. Pas de solution de secours en clair pour les versions
-  plus anciennes (cf. clé d'API). L'Obsidian installé ici est en 1.13.4 et la dernière version est la 1.15.1.
+- → ~~`minAppVersion: "1.11.4"`~~ (version minimale de `SecretStorage`) ; **porté à `1.13.0` en P1** (décision du
+  mainteneur : ne jamais déclarer une version plus ancienne que les API utilisées ; l'onglet de réglages utilise
+  l'API déclarative de 1.13.0, cf. section P1). Pas de solution de secours en clair pour les versions plus anciennes.
+  L'Obsidian installé ici est en 1.13.4 et la dernière version est la 1.15.1.
 
 ### Appels HTTP
 - `requestUrl(param)` : « comme `fetch()`, sans restriction CORS ». Paramètres : `url`, `method`, `contentType`,
@@ -104,9 +106,10 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   plugins (l'utilisateur le choisit par son nom). Source : guide *Store secrets*, `obsidian.d.ts`.
 - → **Clé d'API via `SecretStorage` uniquement** (`settings.apiKeySecret` = nom du secret) ; jamais dans `data.json`,
   jamais affichée, jamais journalisée. Clé absente → appels sans `X-API-Key` (Refinr peut fonctionner sans).
-- Le stockage n'est **pas** décrit comme chiffré : « local storage » n'est pas un trousseau du système. → Le réglage et
-  le README disent : stockée sur cet appareil, hors des fichiers du coffre, non chiffrée par Obsidian. Nous ne dirons
-  jamais « sécurisé ».
+- Le stockage n'est **pas** décrit comme chiffré par la documentation. → Texte du réglage et du README (décision du
+  mainteneur, P1) : « Stored by Obsidian on this device, outside your vault files (so it is not synced with your
+  notes). How it is protected depends on Obsidian and your operating system. » — ni « encrypted » ni « not
+  encrypted », jamais « sécurisé ».
 - **Documenté, à confirmer à l'exécution** : absence réelle de la valeur dans `.obsidian/` (donc non synchronisée ni
   versionnée), disponibilité sur mobile, persistance après redémarrage, comportement de Obsidian Sync (secret à
   ressaisir sur chaque appareil ?).
@@ -152,7 +155,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   `SPDX-License-Identifier: MIT` dès P1. Pas de CLA.
 
 ### Ajustements reportés dans le plan (P1–P4)
-- P1 : `minAppVersion 1.11.4`, `isDesktopOnly false`, `id refinr`, `obsidian` épinglé, TypeScript 5.x, lint
+- P1 : `minAppVersion 1.13.0` (relevée en P1, cf. section P1), `isDesktopOnly false`, `id refinr`, `obsidian` épinglé, TypeScript 5.x, lint
   `eslint-plugin-obsidianmd`, en-têtes SPDX MIT, `LICENSE` MIT ; clé d'API via `SecretComponent`/`SecretStorage` (plus de
   « champ masqué » dans `data.json`) ; réglage « taille max envoyée » remplacé par `maxContentChars` lu sur `/source` ;
   délais d'attente côté plugin ; client HTTP sur `requestUrl` avec `throw: false`, testé via un transport injecté.
@@ -165,12 +168,101 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 
 ### À confirmer à l'exécution (essai réel P4)
 1. `requestUrl` sur mobile (iOS, Android), y compris vers un Refinr en `http://` sur le réseau local
-   (`REFINR_ALLOWED_HOSTS` renseigné) ; en-tête `Origin` envoyé ou non (desktop et mobile), sans 403 CORS. Sur
-   desktop, ce point est vérifié **dès la fin de P1** (essai réel de « tester la connexion » contre le Refinr local).
-2. `SecretStorage` : valeur absente de `.obsidian/` (fichiers du coffre), persistance après redémarrage, disponibilité
-   sur mobile, comportement avec Obsidian Sync.
-3. `SecretComponent` : création, sélection et changement de secret dans les réglages.
+   (`REFINR_ALLOWED_HOSTS` renseigné) ; en-tête `Origin` envoyé ou non **sur mobile**, sans 403 CORS.
+   *Desktop : confirmé en P1 (macOS, aucun `Origin`, cf. « Essai réel P1 »).*
+2. `SecretStorage` : disponibilité sur mobile, comportement avec Obsidian Sync, emplacement exact de la valeur.
+   *Desktop : valeur absente des fichiers du coffre et persistance après redémarrage confirmées en P1.*
+3. `SecretComponent` : changement et suppression de secret dans les réglages. *Création et sélection : confirmées en P1.*
 4. `processFrontMatter` : mise en page, commentaires et ordre des clés préservés ; erreur claire sur un YAML invalide.
 5. `embeds` : `![[…]]` dans du code ignoré ; bloc `^id` d'élément de liste ; note juste modifiée (cache à jour).
 6. Rendu de la fenêtre d'aperçu (thèmes clair et sombre, mobile).
 7. Délai dépassé côté plugin : notice correcte, aucune relance de `create-jira`.
+
+## Phase P1 — Squelette, réglages, connexion
+
+### Outillage
+- **Gabarit officiel** `obsidian-sample-plugin@07ceb81` (0BSD) : `esbuild.config.mjs`, `eslint.config.mts`,
+  `tsconfig.json`, `version-bump.mjs`, `.editorconfig`, `.npmrc` repris ; bannière du bundle avec l'en-tête SPDX MIT ;
+  code d'exemple et `AGENTS.md` non repris.
+- **Versions exactes** (`--save-exact`, vérifiées sur npm le 2026-11-13) : `obsidian` 1.14.4 (au lieu de `latest`),
+  `typescript` 5.9.3 (dernière 5.x, décision P0), `esbuild` 0.28.2, `eslint` / `@eslint/js` 9.39.5, `typescript-eslint`
+  8.72.2, `eslint-plugin-obsidianmd` 0.5.1, `globals` 17.14.0, `jiti` 2.7.0, `@types/node` 22.20.5, `vitest` 5.1.0.
+- **ESLint 9, pas 10** : version du gabarit ; `eslint-plugin-obsidianmd` embarque `eslint-plugin-import`, non suivi sur
+  ESLint 10. La règle `noUnsupportedApi` de ce plugin vérifie qu'aucune API utilisée n'exige plus que `minAppVersion`.
+- **Vitest 5** (demandé par le mainteneur) : seule devDependency ajoutée au gabarit ; impose Node `^22.12 || ^24`
+  → `engines.node >=22.12.0`, `.nvmrc` 24, CI sur Node 22 et 24 (Node 20, présent dans le gabarit, est en fin de vie).
+- **Aucune dépendance d'exécution** : tout est en devDependencies, le bundle ne contient que notre code.
+- **`postinstall` d'esbuild non exécuté** (npm 11 : `allowScripts`) : sans effet, le binaire de la plateforme est
+  installé par les dépendances optionnelles (`npx esbuild --version` → 0.28.2).
+- **CI** (`.github/workflows/ci.yml`, actions épinglées par SHA comme dans `refinr`) : lint + build + tests (Node 22,
+  24), en-têtes SPDX, gitleaks 8.30.1 (CLI officielle, somme de contrôle vérifiée, historique complet), absence
+  d'attribution IA dans les messages des commits poussés (`scripts/check-ai-attribution.sh`, même motif que le hook).
+  Le workflow de release du gabarit est reporté à P4.
+- **Hooks versionnés** repris de `refinr` (`pre-commit` gitleaks + SPDX, `commit-msg` anti-attribution) ;
+  `scripts/check-spdx.sh` attend `SPDX-License-Identifier: MIT` sur `*.ts|mts|mjs|cjs|js|css`, hooks, scripts, YAML
+  GitHub.
+- **`minAppVersion` 1.13.0 et réglages déclaratifs** (décision du mainteneur) : la règle
+  `obsidianmd/settings-tab/prefer-setting-definitions` demande l'API déclarative (`getSettingDefinitions`, réglages
+  rendus par Obsidian et trouvables par la recherche des réglages), apparue en 1.13.0, et la configuration recommandée
+  interdit de la désactiver. → `minAppVersion` passe de 1.11.4 à **1.13.0** (`manifest.json`, `versions.json`) et
+  l'onglet est entièrement déclaratif (plus de `display()`, déprécié depuis 1.13.0) : **lint à 0 avertissement**.
+  Le contrôle déclaratif `secret` (`SettingSecretControl`) n'existe qu'à partir de 1.13.2 : la clé est rendue par une
+  définition `render` avec `SecretComponent` (1.11.1). Validation en ligne par `validate` (`urlError`,
+  `integerError`, testés) ; `setControlValue` repasse chaque changement par `normalizeSettings` avant
+  `saveSettings`.
+- **Minuteurs `window.setTimeout`** (règle `prefer-window-timers`, compatibilité avec les fenêtres détachées) ; sous
+  Vitest, `tests/setup.ts` fait de `window` l'objet global.
+
+### Code et réglages
+- **Interface en anglais** (casse de phrase) : langue du catalogue et du README ; une traduction pourra venir plus tard.
+- **Client isolé** : `HttpTransport` injecté (tests sans Obsidian), `requestUrl` dans un seul module ; erreurs typées
+  `network`, `timeout`, `unauthorized`, `host-not-allowed` (403 JSON « Host not allowed »), `cors` (403 texte
+  « Invalid CORS request »), `too-large`, `http`, `invalid-response` ; message `error` et `correlationId` de Refinr
+  repris ; la clé est masquée dans tout détail d'erreur.
+- **« Test connection »** : `GET /health` (exempté de clé chez Refinr), puis `/source` et `/tracker` (soumis à la clé :
+  ce sont eux qui prouvent qu'elle est acceptée) ; délai 30 s par appel ; si Refinr est injoignable, on n'insiste pas.
+- **Délai d'analyse par défaut : 1 560 s (26 min)**, calculé sur le code de Refinr avec ses réglages par défaut :
+  un délai dépassé n'est jamais relancé, les nouveaux essais ne suivent que des échecs rapides (429, 5xx, injoignable :
+  2 au plus, attente plafonnée à 30 s), et une sortie hors schéma est relancée 2 fois (`max-repair-attempts`).
+  Un appel structuré coûte donc au plus 3 × (délai + 60 s) : analyse 3 × (300 + 60) = 1 080 s, verdict séparé
+  (facultatif, `refinr.llm.verdict.provider`) 3 × (90 + 60) = 450 s par lot de 10 stories (lots séquentiels),
+  soit 1 530 s pour un lot, plus 30 s de marge. Au-delà de 10 stories avec verdict séparé, ajouter 450 s par lot :
+  réglable de 60 à 7 200 s. Message de délai dépassé : « Refinr may still be analysing the note… » (analyse),
+  « The issues may have been created anyway: check the tracker before trying again. » (création).
+- **Inclusions** : profondeur max 3 (bornes 0–10), 100 000 caractères ajoutés au plus (bornes 0–1 000 000), soit la
+  moitié de la limite par défaut de Refinr pour garder la place de la note elle-même ; la limite effective reste
+  `maxContentChars` (P2).
+- **`data.json`** : `refinrUrl`, `apiKeySecret` (nom du secret), `defaultProjectKey`, `embedMaxDepth`, `embedMaxChars`,
+  `analysisTimeoutSeconds` ; relu par `normalizeSettings` (types et bornes), aucune valeur de clé.
+
+### Essai réel P1 (2026-11-13, macOS, Obsidian 1.13.4, coffre de test `~/dev/doc-to-jira/refinr-obsidian-test-vault`)
+- Plugin compilé copié dans le coffre ; secret factice `refinr-p1-test` créé via `SecretComponent` (valeur de 21
+  caractères, factice).
+- **Serveur d'écho** (`127.0.0.1:8099`, journal des en-têtes) : notice « Refinr: connection OK / Refinr is up
+  (http://127.0.0.1:8099). / Source: Echo source (notes up to 200,000 characters, title included). / Tracker: Echo
+  tracker. ». En-têtes reçus pour `/health`, `/source`, `/tracker` :
+  - **aucun en-tête `Origin`** (ni `Referer`) ; `sec-fetch-site: none`, `sec-fetch-mode: no-cors` ;
+  - `user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)
+    obsidian/1.13.4 Chrome/150.0.7871.114 Electron/43.1.1 Safari/537.36` ;
+  - `x-api-key` présent, **21 caractères** (longueur de la valeur factice), `accept: application/json`.
+- **Refinr local** (`localhost:8080`, clé d'API désactivée, `CORS_ALLOWED_ORIGINS` par défaut) : notice « Refinr:
+  connection problem / Refinr answers but is degraded: unavailable service(s): jira. / Source: Confluence (notes up to
+  200,000 characters, title included). / Tracker: Jira. » — **pas de 403 CORS** ; Jira DOWN pour une raison sans
+  rapport (jeton révoqué ; log backend `Jira health check failed: HTTP 404`). Aucun rejet CORS ni d'hôte dans les
+  logs du backend pendant l'essai (seule ligne CORS : `CORS allowed origins: [http://localhost:3000]` au démarrage).
+- **Après Cmd+Q et relance** : même notice, secret toujours trouvé → **persistance confirmée** sur desktop.
+- L'essai a été fait avec l'onglet de réglages impératif (`display()`), avant le passage à l'API déclarative ; le
+  client HTTP et la commande sont inchangés depuis. Rendu de l'onglet déclaratif : à revoir lors de l'essai de P2.
+- **Conclusion CORS (desktop)** : `requestUrl` n'envoie pas d'`Origin` → le filtre CORS de Refinr ne s'applique pas,
+  aucune configuration `CORS_ALLOWED_ORIGINS` n'est nécessaire sur desktop. Aucune évolution de Refinr requise. Le
+  message d'erreur `cors` et la ligne du README restent pour le mobile (non vérifié).
+- **Stockage du secret** :
+  - fichiers du coffre : valeur **absente** (`grep -r`) ; seul le **nom** `refinr-p1-test` figure dans
+    `.obsidian/plugins/refinr/data.json` ;
+  - profil Obsidian (`~/Library/Application Support/obsidian`, 124 fichiers, recherche UTF-8 et UTF-16) : valeur
+    **absente en clair** ; le `Local Storage` ne contient que des métadonnées, clé `<id du coffre>-secrets-meta` →
+    `{"refinr-p1-test":{"lastAccess":…}}` ;
+  - la documentation dit « local storage » ; l'observation montre que la valeur n'y est pas en clair. Elle est
+    vraisemblablement chiffrée ou confiée au trousseau du système (Electron `safeStorage`), **non vérifié** : la
+    lecture du trousseau macOS n'a pas été faite. → Texte neutre retenu (cf. section P0 « Clé d'API ») ; emplacement
+    exact à vérifier en P4 (point 2 de la liste).
