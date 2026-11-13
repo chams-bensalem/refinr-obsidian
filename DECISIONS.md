@@ -528,3 +528,44 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   REST contract (rate limits and fallback verdicts) » — 429 du fournisseur → 503 explicite + `Retry-After` ;
   `"aiReadySource": "model" | "fallback"` par story dans `analyze-preview` et `create-jira`. Quand elle sera livrée,
   le plugin lira `aiReadySource` et gardera le repérage par libellé pour les versions plus anciennes de Refinr.
+
+## Dépendances
+
+### Alerte Dependabot n°1 : minimatch (2026-11-14)
+- **Avis** : [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) (CVE-2026-118764), gravité
+  **modérée**, CWE-405, publié le 2026-10-30, mis à jour le 2026-11-04. « Potential denial of service via globparts
+  amplification » : avec `optimizationLevel >= 2`, la transformation `**/../` de `firstPhasePreProcess()` clone des
+  entrées de `globParts` dans une boucle jusqu'au point fixe, puis `secondPhasePreProcess()` les compare deux à deux
+  (quadratique). Un **motif glob fourni par un attaquant** peut ainsi consommer beaucoup de CPU et de mémoire.
+- **Versions** : vulnérables `>= 7.0.0, < 11.0.1` ; corrigée à partir de **11.0.1** (commit `77a0f5c`, 2026-10-27).
+  **Aucun correctif en 9.x ni en 10.x** : dernières versions 9.0.9 (2026-02-26) et 10.2.6 (2026-07-27), toutes deux
+  vulnérables (vérifié sur npm et dans l'avis global). Le plan initial (override dans les majeures `^9.0.5` et
+  `^10.2.2`) était donc impossible.
+- **Portée** : dépendance de **développement** uniquement (`dev: true` dans le lockfile), deux copies vulnérables :
+  `9.0.9` via `eslint-plugin-obsidianmd` → `@microsoft/eslint-plugin-sdl` → `eslint-plugin-n@17.10.3` (`^9.0.5`), et
+  `10.2.6` via `typescript-eslint` → `@typescript-eslint/typescript-estree@8.72.2` (`^10.2.2`, encore dans sa dernière
+  version). `3.1.5` (ESLint, `eslint-plugin-import`, `eslint-plugin-react`) est hors de la plage. **Absent de
+  `main.js`** : aucune occurrence de `minimatch`, `globParts`, `firstPhasePreProcess` dans le bundle de production ;
+  métafichier esbuild : 17 entrées, toutes dans `src/`, aucune dans `node_modules`. Exposition réelle faible : les
+  deux paquets n'appellent que `minimatch(...)` / `new Minimatch(...)` sur des motifs écrits par nous
+  (`allowDefaultProject`, configuration ESLint).
+- **Refusé** : la rétrogradation proposée de `eslint-plugin-obsidianmd` vers 0.0.2 (dernière version : 0.5.1, sur
+  laquelle reposent les règles du catalogue).
+- **Décision** (mainteneur) : `overrides` dans `package.json`, limité aux deux parents, vers **`^11.0.1`** (résolu en
+  11.0.8) :
+  `"eslint-plugin-n": { "minimatch": "^11.0.1" }` et `"@typescript-eslint/typescript-estree": { "minimatch":
+  "^11.0.1" }`. C'est une majeure de plus que les plages déclarées par ces paquets ; la 11.0 casse l'API (retrait de
+  `makeRe()`, `Minimatch#regexp`, `AST` ; appariement des chemins finissant par `/`), mais les deux paquets n'utilisent
+  que l'API conservée.
+- **Effet de bord constaté** : npm applique aussi l'override à `eslint` (peer-dépendance d'`eslint-plugin-n`, résolue
+  dans son sous-arbre), donc à `eslint`, `@eslint/config-array` et `@eslint/eslintrc`, qui passent de 3.1.5 à 11.0.8.
+  Seules `eslint-plugin-import` et `eslint-plugin-react` gardent 3.1.5. **Vérifié sans régression** par comparaison
+  avec `main` (`90e5964`, lockfile d'origine, clone jetable) : mêmes **32 fichiers** analysés, 0 problème des deux
+  côtés, et configuration résolue (`eslint --print-config`) **identique** pour `src/main.ts`, `manifest.json` et
+  `tests/verdict.test.ts` (chemin racine normalisé). `npm ls minimatch` : 7 chemins, versions 11.0.8 et 3.1.5, aucune
+  dans la plage vulnérable ; `npm audit` : « found 0 vulnerabilities ».
+- **Retrait de l'override** : dès que `eslint-plugin-obsidianmd` (via `@microsoft/eslint-plugin-sdl` /
+  `eslint-plugin-n`) et `typescript-eslint` embarqueront une version corrigée de minimatch, supprimer `overrides` et
+  régénérer le lockfile (`npm install`, puis `npm ls minimatch`). Dependabot le signalera (mise à jour de ces paquets,
+  ou alerte rouverte si l'override est retiré trop tôt). Si un lint se met à se comporter bizarrement entre-temps,
+  soupçonner d'abord cet override (ESLint 9 tourne avec une minimatch plus récente que celle qu'il déclare).
