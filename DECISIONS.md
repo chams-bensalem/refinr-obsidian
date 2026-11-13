@@ -554,26 +554,47 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
   gabarit ajoute pourtant une entrée à chaque version. → on suit le gabarit (une entrée par version), ce qui permet un
   contrôle simple et sans ambiguïté au moment de la release.
 - **Release en brouillon** : le workflow de la doc et celui du gabarit créent un **draft** (`gh release create --draft`),
-  publié ensuite à la main avec les notes de version. → même chose ; le mainteneur publie.
+  publié ensuite à la main. → même chose ; le mainteneur relit et publie. Notes générées par GitHub
+  (`--generate-notes` : PR fusionnées depuis la release précédente), retouchées avant publication.
 - **Attestation de provenance** : la doc et le gabarit ajoutent `actions/attest@v4` (« recommended when you submit a
-  plugin »), qui exige `id-token: write` et `attestations: write`. → **non reprise** : consigne du mainteneur,
-  `contents: write` seul sur le job. À ajouter plus tard si le catalogue l'exige ou si le mainteneur le souhaite (deux
-  permissions de plus et une étape épinglée par SHA).
+  plugin »). ~~Non reprise (`contents: write` seul)~~ → **reprise** (décision du mainteneur, 2026-11-13) sur `main.js`,
+  `manifest.json` et `styles.css`, comme dans la doc officielle.
+  - Version : `actions/attest` **v4.2.2** (dernière v4, 2026-08-04), épinglée par SHA
+    `1e69f48acb82d1966a394da916b4c1698aa569d6` (commit du tag, vérifié par l'API GitHub).
+  - Permissions (README de l'action, v4.2.2) : `id-token: write` (jeton OIDC pour le certificat de signature
+    Sigstore) et `attestations: write` (enregistrement de l'attestation). La troisième permission citée,
+    `artifact-metadata: write`, ne sert qu'aux « storage records », créés seulement avec `push-to-registry: true`
+    (images OCI) et pour des dépôts d'organisation → inutile ici, non demandée.
+  - **Limite : dépôt privé.** « To use artifact attestations in private or internal repositories, you must be on a
+    GitHub Enterprise Cloud plan » (README de l'action). Le dépôt `refinr-obsidian` est **privé** au 2026-11-13 :
+    tant qu'il l'est (sans Enterprise Cloud), l'étape d'attestation échouera et aucune release ne sera créée. Le dépôt
+    doit de toute façon être public pour le catalogue ; le changement de visibilité reste une décision du mainteneur.
+  - Vérification par un utilisateur : `gh attestation verify main.js --repo chams-bensalem/refinr-obsidian`.
 
 ### Workflow `.github/workflows/release.yml`
 - **Déclencheur** : push d'un tag `'[0-9]+.[0-9]+.[0-9]+'` (motif de filtre GitHub) ; un tag `v0.1.0` ne déclenche rien.
-- **Permissions** : `permissions: {}` au niveau du workflow, `contents: write` sur le seul job (création de la release
-  et envoi des fichiers). `actions/checkout` avec `persist-credentials: false` : le jeton n'est remis qu'à l'étape
-  `gh release create` (pas pendant `npm ci`). Tag passé par `env` (`TAG`), jamais interpolé dans le script.
-- **Étapes** : contrôle des versions **avant** l'installation (échec rapide), `npm ci`, lint, tests, build (Node de
-  `.nvmrc`, 24), puis `gh release create "$TAG" --verify-tag --draft --title "$TAG"` avec les trois fichiers. Actions
-  épinglées par SHA, mêmes versions que `ci.yml`. `concurrency` par tag, sans annulation.
+- **Permissions** : `permissions: {}` au niveau du workflow ; sur le seul job, chacune commentée : `contents: write`
+  (création de la release et envoi des fichiers), `id-token: write` et `attestations: write` (attestation).
+  `actions/checkout` avec `persist-credentials: false` : le jeton n'est pas laissé dans `.git/config` pendant
+  `npm ci` ; seules les étapes d'attestation et de release le reçoivent. Tag passé par `env` (`TAG`), jamais interpolé
+  dans le script.
+- **Étapes** : commit sur `main`, puis contrôle des versions **avant** l'installation (échec rapide), `npm ci`, lint,
+  tests, build (Node de `.nvmrc`, 24), attestation, puis `gh release create "$TAG" --verify-tag --draft --title "$TAG"
+  --generate-notes` avec les trois fichiers. Actions épinglées par SHA (checkout et setup-node aux mêmes versions que
+  `ci.yml`). `concurrency` par tag, sans annulation.
 - **Contrôle des versions** (`node version-bump.mjs check <tag>`) : tag au format `x.y.z` ; `manifest.json`
-  `version` = tag ; `package.json` `version` = tag (ajouté à la demande : `npm version` les garde alignés, un écart
-  signale une édition à la main) ; `versions.json[tag]` présent et égal au `minAppVersion` du manifest. Tous les écarts
-  sont listés, avec la commande qui les corrige.
-- **Pas de contrôle « le tag est sur `main` »** : non demandé ; la procédure du README pose le tag sur `main` après
-  fusion de la PR.
+  `version` = tag ; `package.json` `version` = tag (gardé par décision du mainteneur : `npm version` les garde
+  alignés, un écart signale une édition à la main) ; `versions.json[tag]` présent et égal au `minAppVersion` du
+  manifest. Tous les écarts sont listés, avec la commande qui les corrige.
+- **Le commit du tag doit être dans l'historique de `main`** (décision du mainteneur, 2026-11-13) : `actions/checkout`
+  avec `fetch-depth: 0` (historique complet et branches distantes, donc `origin/main`), puis
+  `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`. Pour un push de tag, `GITHUB_SHA` est le commit visé
+  (aussi pour un tag annoté). Échec avec un message `::error::` (commit refusé, marche à suivre) ; échec explicite aussi
+  si `origin/main` manque. Ainsi seul du code relu et fusionné par PR est publié ; le README pose le tag sur `main`
+  après la fusion.
+- **actionlint** (v1.7.12, image Docker `rhysd/actionlint`, lancé une fois hors du dépôt, 2026-11-13) : aucune
+  erreur sur `release.yml` ni `ci.yml` (« Found 0 errors in 2 files »), blocs `run:` compris (shellcheck 0.11.0 de
+  l'image). Pas ajouté à `ci.yml` (proposition faite au mainteneur).
 
 ### `npm version` et `version-bump.mjs`
 - Le script `"version"` du gabarit existait déjà (`node version-bump.mjs && git add manifest.json versions.json`) :
