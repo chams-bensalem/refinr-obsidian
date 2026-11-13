@@ -204,7 +204,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 - **CI** (`.github/workflows/ci.yml`, actions épinglées par SHA comme dans `refinr`) : lint + build + tests (Node 22,
   24), en-têtes SPDX, gitleaks 8.30.1 (CLI officielle, somme de contrôle vérifiée, historique complet), absence
   d'attribution IA dans les messages des commits poussés (`scripts/check-ai-attribution.sh`, même motif que le hook).
-  Le workflow de release du gabarit est reporté à P4.
+  Le workflow de release du gabarit est reporté à P4 (cf. « Phase P4 — Release »).
 - **Hooks versionnés** repris de `refinr` (`pre-commit` gitleaks + SPDX, `commit-msg` anti-attribution) ;
   `scripts/check-spdx.sh` attend `SPDX-License-Identifier: MIT` sur `*.ts|mts|mjs|cjs|js|css`, hooks, scripts, YAML
   GitHub.
@@ -533,6 +533,70 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   REST contract (rate limits and fallback verdicts) » — 429 du fournisseur → 503 explicite + `Retry-After` ;
   `"aiReadySource": "model" | "fallback"` par story dans `analyze-preview` et `create-jira`. Quand elle sera livrée,
   le plugin lira `aiReadySource` et gardera le repérage par libellé pour les versions plus anciennes de Refinr.
+
+## Phase P4 — Release
+
+### Format attendu par le catalogue (sources consultées le 2026-11-13)
+Sources : `obsidianmd/obsidian-developer-docs` commit `1c26772` (2026-10-21) — *Submit your plugin*, *Release your
+plugin with GitHub Actions*, *Reference/Versions*, *Reference/Manifest* ; gabarit `obsidianmd/obsidian-sample-plugin`
+commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/workflows/release.yml`,
+`version-bump.mjs`, `package.json`.
+- **Tag = version exacte** : « The "Tag version" of the release must match the version in your `manifest.json` » ;
+  versions au seul format `x.y.z` (*Manifest*, *Submit*) ; gabarit : « Use the exact version number, don't include a
+  prefix `v` ». À l'installation, Obsidian télécharge les fichiers de la release « whose tag matches the `version` in
+  your manifest ». → tag `0.1.0`, jamais `v0.1.0`.
+- **Fichiers joints** : `main.js`, `manifest.json`, `styles.css` (« optional »), en pièces jointes binaires ;
+  `manifest.json` doit être **à la fois** à la racine du dépôt (la branche par défaut fait foi pour le catalogue) et
+  dans la release. → les trois fichiers sont joints (`styles.css` existe et est versionné).
+- **`versions.json`** (*Reference/Versions*) : objet « version du plugin → `minAppVersion` », lu **à la racine du
+  dépôt** quand l'application est plus ancienne que le `minAppVersion` du manifest, pour proposer la dernière version
+  compatible. La doc précise qu'il suffit de le mettre à jour quand `minAppVersion` change ; le `version-bump.mjs` du
+  gabarit ajoute pourtant une entrée à chaque version. → on suit le gabarit (une entrée par version), ce qui permet un
+  contrôle simple et sans ambiguïté au moment de la release.
+- **Release en brouillon** : le workflow de la doc et celui du gabarit créent un **draft** (`gh release create --draft`),
+  publié ensuite à la main avec les notes de version. → même chose ; le mainteneur publie.
+- **Attestation de provenance** : la doc et le gabarit ajoutent `actions/attest@v4` (« recommended when you submit a
+  plugin »), qui exige `id-token: write` et `attestations: write`. → **non reprise** : consigne du mainteneur,
+  `contents: write` seul sur le job. À ajouter plus tard si le catalogue l'exige ou si le mainteneur le souhaite (deux
+  permissions de plus et une étape épinglée par SHA).
+
+### Workflow `.github/workflows/release.yml`
+- **Déclencheur** : push d'un tag `'[0-9]+.[0-9]+.[0-9]+'` (motif de filtre GitHub) ; un tag `v0.1.0` ne déclenche rien.
+- **Permissions** : `permissions: {}` au niveau du workflow, `contents: write` sur le seul job (création de la release
+  et envoi des fichiers). `actions/checkout` avec `persist-credentials: false` : le jeton n'est remis qu'à l'étape
+  `gh release create` (pas pendant `npm ci`). Tag passé par `env` (`TAG`), jamais interpolé dans le script.
+- **Étapes** : contrôle des versions **avant** l'installation (échec rapide), `npm ci`, lint, tests, build (Node de
+  `.nvmrc`, 24), puis `gh release create "$TAG" --verify-tag --draft --title "$TAG"` avec les trois fichiers. Actions
+  épinglées par SHA, mêmes versions que `ci.yml`. `concurrency` par tag, sans annulation.
+- **Contrôle des versions** (`node version-bump.mjs check <tag>`) : tag au format `x.y.z` ; `manifest.json`
+  `version` = tag ; `package.json` `version` = tag (ajouté à la demande : `npm version` les garde alignés, un écart
+  signale une édition à la main) ; `versions.json[tag]` présent et égal au `minAppVersion` du manifest. Tous les écarts
+  sont listés, avec la commande qui les corrige.
+- **Pas de contrôle « le tag est sur `main` »** : non demandé ; la procédure du README pose le tag sur `main` après
+  fusion de la PR.
+
+### `npm version` et `version-bump.mjs`
+- Le script `"version"` du gabarit existait déjà (`node version-bump.mjs && git add manifest.json versions.json`) :
+  gardé. `version-bump.mjs` est complété : refus d'une version autre que `x.y.z` (sans rien écrire), refus d'un
+  manifest sans `minAppVersion`, saut de ligne final conservé (le gabarit l'enlevait), et sous-commande
+  `check <tag>` utilisée par le workflow.
+- **Contrôle dans `version-bump.mjs` plutôt que dans un script séparé** : un nouveau `scripts/*.mjs` serait analysé par
+  ESLint avec les règles Obsidian et le service de projet TypeScript (erreur « not found by the project service ») ;
+  `version-bump.mjs` est déjà exclu du lint par la configuration du gabarit. Un seul fichier porte ainsi la règle des
+  versions (expression `x.y.z` unique).
+- **`.npmrc`** : `tag-version-prefix=""` (déjà présent, gabarit) et **`git-tag-version=false`** (ajouté) : `npm
+  version` ne crée ni commit ni tag. Le changement de version passe par une PR (jamais de push sur `main`) et le tag est
+  posé ensuite sur `main`. Vérifié dans une copie jetable : `npm version 0.1.1` met à jour `package.json`,
+  `manifest.json`, `versions.json` (`"0.1.1": "1.13.0"`), aucun tag ni commit créé.
+- **Tests** (`tests/release-version.test.ts`) : le script est lancé comme par npm et par le workflow (processus Node
+  dans un dossier temporaire) ; cas nominal, `minAppVersion` relevé, entrée existante, versions refusées, écarts
+  listés, JSON illisible, sous-commande inconnue, et cohérence des fichiers du dépôt pour leur propre version.
+
+### Procédure (résumé, détail dans le README, section « Releasing »)
+1. Branche : `minAppVersion` à la main si besoin, `npm version <x.y.z>`, commit `chore: release <x.y.z>`, PR, fusion.
+2. Sur `main` : `git tag -a <x.y.z> -m <x.y.z>` puis `git push origin <x.y.z>`.
+3. Le workflow crée le brouillon ; le mainteneur relit, rédige les notes et publie.
+4. Première version seulement : soumission sur community.obsidian.md (cf. P0, « Soumission »).
 
 ## Dépendances
 

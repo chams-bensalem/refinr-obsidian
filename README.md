@@ -191,6 +191,25 @@ of the description in Jira), computes a new verdict, and the plugin updates `ver
   and the layout of the windows have only been checked on desktop, and a phone cannot reach a Refinr server on
   `localhost`. The plugin is therefore not offered on iOS and Android in 0.1.0.
 
+## Releasing
+
+For the maintainer. Obsidian installs the files attached to the GitHub release whose tag is **exactly** the
+`version` of `manifest.json` (`x.y.z`, no `v` prefix).
+
+1. On a branch: update `minAppVersion` in `manifest.json` by hand if the release needs a newer Obsidian, then run
+   `npm version <x.y.z>`. It sets the version in `package.json`, `package-lock.json` and `manifest.json` and adds
+   `"<x.y.z>": "<minAppVersion>"` to `versions.json`. It creates no commit and no tag (`.npmrc`).
+2. Commit (`chore: release <x.y.z>`), open a pull request, merge it into `main`.
+3. Tag the merge commit on `main` and push the tag:
+   `git switch main && git pull && git tag -a <x.y.z> -m <x.y.z> && git push origin <x.y.z>`.
+4. The `release` workflow checks that the tag, `manifest.json`, `package.json` and `versions.json` agree (it stops
+   with the list of mismatches otherwise), runs lint, tests and build, then creates a **draft** release with
+   `main.js`, `manifest.json` and `styles.css` attached.
+5. Review the draft on GitHub, write the release notes, and publish it.
+
+If the workflow fails, delete the tag (`git push origin :refs/tags/<x.y.z>` and `git tag -d <x.y.z>`), fix the files
+through a new pull request, and tag again.
+
 ## License
 
 [MIT](LICENSE)
