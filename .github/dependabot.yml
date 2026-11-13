@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Chams Bensalem
+# SPDX-License-Identifier: MIT
+# Automated dependency updates: one weekly PR per ecosystem, minor and patch updates grouped.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Major upgrades kept manual (see DECISIONS.md): TypeScript stays on 5.x, ESLint on 9
+      # (eslint-plugin-obsidianmd), @types/node follows the minimum Node version (22).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
