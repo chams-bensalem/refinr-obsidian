@@ -121,8 +121,9 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   `content.length + title.length` dépasse la limite (message avec les deux tailles). Le 413 reste traité (limite
   modifiée entre-temps). Le réglage « taille max envoyée » prévu en P1 devient inutile, et seule la taille max des
   inclusions reste réglable.
-  Unité : caractères JavaScript (UTF-16), comme `String.length()` côté Java. Écart possible sur les emojis et
-  caractères hors BMP, sans conséquence (même unité des deux côtés).
+  ~~Unité : caractères JavaScript (UTF-16), comme `String.length()` côté Java.~~ **Corrigé en P2** : Refinr compte
+  le texte `"# " + titre + "\n\n" + contenu` en **code points** (`DocumentAnalysis.providedText`,
+  `codePointCount`), cf. section P2.
 
 ### Règles de publication (à respecter dès P1)
 - **Interdit** (*Developer policies*) : obfuscation, publicité dynamique, télémétrie côté client, auto-installation ou
@@ -174,8 +175,9 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
    *Desktop : valeur absente des fichiers du coffre et persistance après redémarrage confirmées en P1.*
 3. `SecretComponent` : changement et suppression de secret dans les réglages. *Création et sélection : confirmées en P1.*
 4. `processFrontMatter` : mise en page, commentaires et ordre des clés préservés ; erreur claire sur un YAML invalide.
-5. `embeds` : `![[…]]` dans du code ignoré ; bloc `^id` d'élément de liste ; note juste modifiée (cache à jour).
-6. Rendu de la fenêtre d'aperçu (thèmes clair et sombre, mobile).
+5. `embeds` : fraîcheur du cache juste après une modification (protection `stale-cache` non déclenchée en essai).
+   *Code en bloc et en ligne, bloc `^id` d'élément de liste : observés en P2 (cf. « Essai réel P2 »).*
+6. Rendu de la fenêtre d'aperçu sur mobile et en thème clair/sombre. *Desktop : observé en P2.*
 7. Délai dépassé côté plugin : notice correcte, aucune relance de `create-jira`.
 
 ## Phase P1 — Squelette, réglages, connexion
@@ -227,7 +229,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   Un appel structuré coûte donc au plus 3 × (délai + 60 s) : analyse 3 × (300 + 60) = 1 080 s, verdict séparé
   (facultatif, `refinr.llm.verdict.provider`) 3 × (90 + 60) = 450 s par lot de 10 stories (lots séquentiels),
   soit 1 530 s pour un lot, plus 30 s de marge. Au-delà de 10 stories avec verdict séparé, ajouter 450 s par lot :
-  réglable de 60 à 7 200 s. Message de délai dépassé : « Refinr may still be analysing the note… » (analyse),
+  réglable de 60 à 7 200 s. Message de délai dépassé : « Refinr may still be analyzing the note… » (analyse),
   « The issues may have been created anyway: check the tracker before trying again. » (création).
 - **Inclusions** : profondeur max 3 (bornes 0–10), 100 000 caractères ajoutés au plus (bornes 0–1 000 000), soit la
   moitié de la limite par défaut de Refinr pour garder la place de la note elle-même ; la limite effective reste
@@ -266,3 +268,98 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
     vraisemblablement chiffrée ou confiée au trousseau du système (Electron `safeStorage`), **non vérifié** : la
     lecture du trousseau macOS n'a pas été faite. → Texte neutre retenu (cf. section P0 « Clé d'API ») ; emplacement
     exact à vérifier en P4 (point 2 de la liste).
+
+## Phase P2 — Aperçu
+
+### Texte envoyé
+- **Commande « Analyze note »** (`analyze-note`, anglais US, disponible seulement sur une note Markdown active) :
+  lecture de la note (`vault.read`, pas le cache, pour les dernières modifications enregistrées), frontmatter retiré
+  (`getFrontMatterInfo().contentStart`), inclusions développées, puis `GET /source` (limite fraîche), contrôle local de
+  la taille, `POST /api/v1/analyze-preview` avec `{content, title}` (`title` = nom de la note). Une analyse à la fois
+  par note. Rien n'est créé dans le tracker.
+- **Limite de taille exacte** (lue dans le code de Refinr, `DocumentAnalysis.providedText`) : Refinr compte
+  `"# " + titre + "\n\n" + contenu` (titre aux espaces regroupés et rognés ; contenu seul si titre vide) en **code
+  points**. `src/document.ts` refait exactement ce calcul (espaces au sens Java `\s`, ASCII seulement) ; au-delà de
+  `maxContentChars`, rien n'est envoyé et la fenêtre donne les deux tailles. Le 413 reste traité.
+- **Expansion des inclusions** (`src/embeds.ts`, pure, 27 tests) : offsets de `metadataCache` (`embeds`), cible par
+  `getFirstLinkpathDest`, section par `resolveSubpath` ; `![[#Titre]]` = même note ; frontmatter des notes incluses
+  retiré ; non-Markdown (images, PDF, canvas) et cibles ou sections absentes laissés tels quels ; liens externes
+  (`scheme://`) laissés tels quels sans avertissement ; embeds situés dans un bloc de code (sections `code`) ignorés ;
+  boucle = même partie déjà en cours d'expansion, ou note entière dont une partie l'est ; profondeur 0 = aucune
+  expansion, sans avertissement ; une inclusion qui ferait dépasser `embedMaxChars` (cumul, inclusions imbriquées
+  comptées une fois) est écartée entière, avec le nombre de caractères écartés.
+- **Cache périmé** : si le texte aux offsets du cache ne correspond plus à l'inclusion (`original`), la note est
+  envoyée sans expansion avec un avertissement, plutôt que coupée au mauvais endroit. Cache absent (note pas encore
+  indexée) : même conduite.
+- **Avertissements visibles** (demande du mainteneur) : tout avertissement change le texte envoyé ; ils sont affichés
+  en tête de l'aperçu (et pendant le chargement, et sur une erreur) dans un encadré, avec le total des caractères
+  écartés.
+
+### Aperçu
+- **Texte brut uniquement** (demande du mainteneur) : tout texte issu de Refinr (donc du modèle) est inséré par
+  `createEl({ text })` / `setText`, jamais via HTML ni `MarkdownRenderer`. Vérifié par `tests/plain-text.test.ts`
+  (aucune source n'emploie `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `MarkdownRenderer`,
+  `sanitizeHTMLToDom`, `DOMParser`, `createContextualFragment`), par le lint (`no-unsanitized`) et par l'essai réel.
+- **`raw` conservé** : le tableau `epics` est gardé tel que reçu pour être renvoyé à `create-jira` en P3, sans perte
+  des champs que le plugin n'affiche pas.
+- **Fenêtre** (`Modal`) : chargement (taille envoyée, limite), erreur (message de l'API via `describeError`),
+  résultat : totaux, épics, stories repliables (`details`) avec badge de verdict (`ai-ready`,
+  `validation-necessaire`, `no verdict`), points, « As … I want … so that … », critères, sous-tâches (heures). Styles
+  par classes et variables d'Obsidian. Fenêtre fermée pendant l'analyse : l'analyse continue, une notice « preview
+  ready » propose « Open preview » (résultat en mémoire seulement).
+- **Dependabot** (`.github/dependabot.yml`) : npm et GitHub Actions, hebdomadaire, mineures et correctifs groupés ;
+  majeures ignorées pour `typescript` (5.x), `eslint` et `@eslint/js` (9) et `@types/node` (Node 22 minimum).
+
+### Essai réel P2 (2026-11-13, macOS, Obsidian 1.15.1, coffre de test, notes `P2/`)
+- **Onglet de réglages déclaratif** : rendu correct ; la recherche des réglages trouve « Maximum embed depth » et
+  « Maximum embedded characters » ; URL sans schéma → « Enter an http:// or https:// URL. » ; valeurs gardées après
+  réouverture ; texte de la clé et délai 1 560 s affichés. Profondeur 99 : c'est la **validation native** du champ
+  nombre d'Obsidian (`min`/`max`) qui s'affiche, notre message `integerError` n'apparaît pas ; `abc` ne peut pas être
+  saisi (champ nombre). Valeurs hors bornes jamais enregistrées (en plus, `setControlValue` repasse par
+  `normalizeSettings`).
+- **Texte réellement envoyé** (serveur d'écho, corps journalisé, 718 caractères + 13 pour `# Spec main\n\n` = 731,
+  comme affiché) : frontmatter de la note et de la note incluse retirés ✓ ; section `#Scope` avec son sous-titre,
+  arrêtée avant « Out of scope » ✓ ; bloc de paragraphe `^vat` ✓ ; boucle A → B → A arrêtée sur `![[Loop A]]` dans
+  `Loop B` ✓ ; `![md](Part-md.md)` (inclusion au format Markdown) développée ✓ ; cible absente et image laissées
+  telles quelles ✓ ; `Huge appendix` (124 000 caractères) écartée, « 123,999 characters left out » ✓ ;
+  `![[…]]` dans un **bloc de code** et dans du **code en ligne** laissés tels quels ✓ (le cache d'Obsidian ne les
+  compte pas comme inclusions, ou notre filtre les écarte) ; `[[lien]]` simple intact ✓. En-têtes : pas d'`Origin`,
+  `content-type: application/json`, `x-api-key` présent.
+- **Écart constaté — bloc d'élément de liste** : `![[Sections#^item]]` (identifiant sur un élément qui a un
+  sous-élément) n'envoie que sa ligne, `- second item with child ^item` ; le sous-élément est perdu, sans
+  avertissement (`resolveSubpath` donne la plage de l'élément seul). **Point ouvert**, cf. fin de section.
+- **Texte brut** : `<b>bold?</b>`, `<img src=x onerror="alert(1)">`, `**markdown?**`, `[[link?]]` affichés
+  littéralement (titre et description d'épic, titre de story) ; aucun rendu HTML, aucune alerte ✓. Trois badges de
+  verdict et les points affichés ✓.
+- **Refinr local** (`google / gemini-3.6-flash`) : chargement puis fenêtre fermée ; notice « Refinr: the preview of
+  Spec main is ready. » en moins de 2 min, « Open preview » rouvre l'aperçu : 1 épic, 1 story `ai-ready` (3 pts),
+  2 sous-tâches ; la description reprend le contenu des inclusions (commandes payées, numéro, date, montant, commandes
+  annulées exclues) ✓.
+- Cache périmé : non testé (facultatif).
+
+### Décisions après l'essai P2 (mainteneur)
+- **`integerError` gardé comme filet de sécurité** : rarement visible sur desktop (validation native du champ nombre),
+  couvre décimaux et mobile.
+- **Bloc d'élément de liste : sous-éléments inclus** (`extendListBlock`, `src/embeds.ts`, appelée par l'adaptateur
+  quand `resolveSubpath` renvoie un bloc avec `list`) : la plage va jusqu'au `position.end` du dernier descendant,
+  à tous les niveaux ; un élément est descendant si sa chaîne de `parent` (`cache.listItems`) remonte à la ligne de
+  l'élément ciblé ; les frères suivants et le reste de la liste sont exclus. Garde supplémentaire : on s'arrête au
+  premier élément suivant qui n'est pas plus indenté que la cible (`position.start.col`), car un élément racine d'une
+  liste commençant à la ligne 0 a `parent` = -0 = 0, la même valeur que « enfant de la ligne 0 ». Les sous-éléments
+  passent par la même expansion (profondeur, taille, boucles). Bloc sur un paragraphe ou un titre : inchangé.
+  Tests : enfants sur deux niveaux, sans enfant, dernier élément, élément suivi d'un frère, sous-élément contenant une
+  inclusion, liste numérotée, liste de tâches, élément imbriqué ciblé, paragraphe, ambiguïté de la ligne 0 (contrôle :
+  fonction neutralisée → 8 tests en échec).
+- **Correctif après le second essai** : le premier build échouait sur toute la note (« Could not read the note:
+  Cannot read properties of null (reading 'position') »). Cause : dans le vrai cache, `resolveSubpath` renvoie
+  **`list: null`** pour un bloc de paragraphe (`^vat`), et non `undefined` ; le code lisait `list.position`. Les
+  fixtures de test ne produisaient jamais ce `null`. → Conversion isolée dans `subpathRange`
+  (`src/obsidian/subpath.ts`, pure, jamais d'exception) : `list` nul ou absent = bloc ordinaire ; `listItems` absent,
+  ligne introuvable, éléments `null` ou mal formés → la ligne seule, avec l'avertissement `list-incomplete` dans
+  l'encadré ; l'analyse continue. Test de non-régression sur les objets **réels** du cache de `P2/Sections.md`
+  (capturés par un `console.log` temporaire, retiré ensuite ; lignes à partir de 0, racine `parent: -12`,
+  sous-élément `parent: 13`, `list` = l'objet de `listItems` qui porte `id: "item"`).
+- **Essai réel du correctif** (Obsidian 1.15.1) : aperçu affiché sans erreur, 4 problèmes d'inclusion ; texte reçu par
+  le serveur d'écho pour la section « List item block » :
+  `- second item with child ^item` puis `  - child of second item` ; 743 caractères de contenu + 13 de titre = 756
+  affichés (731 avant + 25 pour le sous-élément).
