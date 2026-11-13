@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
+import { fallbackCause } from './verdict';
 
 /**
  * Backlog preview returned by `POST /api/v1/analyze-preview` (contract: Refinr's
@@ -7,7 +8,10 @@
  * displayed as plain text (see `preview-modal.ts`).
  */
 
-/** Refinr's readiness verdict; `unknown` when Refinr could not give one. Values match Refinr's tracker labels. */
+/**
+ * Refinr's readiness verdict; `unknown` when Refinr could not give one (missing, or its fallback verdict — written
+ * as validation-necessaire in the tracker, see `verdict.ts`). Values match Refinr's tracker labels.
+ */
 export type Verdict = 'ai-ready' | 'validation-necessaire' | 'unknown';
 
 export interface TaskView {
@@ -118,10 +122,17 @@ function parseStory(raw: unknown): StoryView | null {
 		storyPoints: count(raw.estimatedStoryPoints),
 		priority: text(raw.priority),
 		labels: strings(raw.labels),
-		verdict: raw.aiReady === true ? 'ai-ready' : raw.aiReady === false ? 'validation-necessaire' : 'unknown',
+		verdict: verdictOf(raw.aiReady, text(raw.aiReadyReason)),
 		verdictReason: text(raw.aiReadyReason),
 		tasks,
 	};
+}
+
+function verdictOf(aiReady: unknown, reason: string): Verdict {
+	if (aiReady === true) {
+		return 'ai-ready';
+	}
+	return aiReady === false && fallbackCause(reason) === null ? 'validation-necessaire' : 'unknown';
 }
 
 function parseTask(raw: unknown): TaskView | null {

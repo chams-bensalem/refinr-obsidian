@@ -135,3 +135,15 @@ function timeoutMessage(timeoutMs: number, operation: Operation): string {
 function isUnreachable(error: RefinrError): boolean {
 	return error.kind === 'network' || error.kind === 'timeout' || error.kind === 'invalid-response';
 }
+
+/** The request may have reached Refinr: the issues may exist. */
+export function unknownCreationMessage(error: RefinrError, baseUrl: string): string {
+	if (error.kind === 'timeout') {
+		return describeError(error, baseUrl, 'creation');
+	}
+	const cause =
+		error.kind === 'network'
+			? `The connection to Refinr was lost after the request was sent${error.detail === undefined ? '' : ` (${error.detail})`}.`
+			: describeError(error, baseUrl, 'check');
+	return `${cause} The issues may have been created anyway: check the tracker before trying again.`;
+}

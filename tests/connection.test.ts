@@ -3,7 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import type { HttpRequest, HttpResponse } from '../src/api/http';
 import { type RefinrError, RefinrClient } from '../src/api/refinr-client';
-import { buildConnectionReport, checkConnection, describeError, type ConnectionCheck } from '../src/connection';
+import {
+	buildConnectionReport,
+	checkConnection,
+	type ConnectionCheck,
+	describeError,
+	unknownCreationMessage,
+} from '../src/connection';
 
 const BASE = 'http://localhost:8080';
 const UP = { ok: true as const, value: { status: 'UP', services: { confluence: { status: 'UP', details: {} } } } };
@@ -149,5 +155,25 @@ describe('checkConnection', () => {
 		expect(seen).toEqual(['/api/v1/health']);
 		expect(check.source).toBeUndefined();
 		expect(check.tracker).toBeUndefined();
+	});
+});
+
+describe('unknownCreationMessage', () => {
+	it('timeout: the issues may have been created', () => {
+		expect(unknownCreationMessage({ kind: 'timeout', timeoutMs: 60_000 }, BASE)).toBe(
+			'No answer from Refinr after 60 s. The issues may have been created anyway: check the tracker before trying again.',
+		);
+	});
+
+	it('connection lost after sending', () => {
+		expect(unknownCreationMessage({ kind: 'network', detail: 'net::ERR_CONNECTION_RESET' }, BASE)).toBe(
+			'The connection to Refinr was lost after the request was sent (net::ERR_CONNECTION_RESET). The issues may have been created anyway: check the tracker before trying again.',
+		);
+	});
+
+	it('500 without lists', () => {
+		expect(unknownCreationMessage({ kind: 'http', status: 500, detail: 'Failed to create the issues' }, BASE)).toBe(
+			'Refinr answered HTTP 500: Failed to create the issues. The issues may have been created anyway: check the tracker before trying again.',
+		);
 	});
 });

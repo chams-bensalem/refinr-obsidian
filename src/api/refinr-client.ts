@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
+import { type CreationResult, parseCreation } from '../creation';
 import { parsePreview, type Preview } from '../preview';
 import { type HttpRequest, type HttpTransport, TimeoutError, withTimeout } from './http';
 
@@ -113,6 +114,15 @@ export class RefinrClient {
 		return this.send('POST', '/api/v1/analyze-preview', JSON.stringify(document), timeoutMs, parsePreview);
 	}
 
+	/**
+	 * `POST /api/v1/create-jira` with the preview's `epics`, unchanged. The answer is read whatever its status when it
+	 * holds the creation lists (200, 207 and 502 do): what was created matters, not the status code.
+	 */
+	createIssues(epics: unknown[], projectKey: string, timeoutMs: number): Promise<Result<CreationResult>> {
+		const query = projectKey === '' ? '' : `?projectKey=${encodeURIComponent(projectKey)}`;
+		return this.send('POST', `/api/v1/create-jira${query}`, JSON.stringify(epics), timeoutMs, parseCreation, true);
+	}
+
 	private get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
 		return this.send('GET', path, undefined, this.options.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS, parse);
 	}
@@ -123,6 +133,7 @@ export class RefinrClient {
 		body: string | undefined,
 		timeoutMs: number,
 		parse: (json: unknown) => T | null,
+		parseErrorBodies = false,
 	): Promise<Result<T>> {
 		const headers: Record<string, string> = { Accept: 'application/json' };
 		const key = this.options.apiKey();
@@ -148,6 +159,12 @@ export class RefinrClient {
 		if (status >= 200 && status < 300) {
 			const value = parse(parseJson(text));
 			return value === null ? failure({ kind: 'invalid-response', status }) : { ok: true, value };
+		}
+		if (parseErrorBodies) {
+			const value = parse(parseJson(text));
+			if (value !== null) {
+				return { ok: true, value };
+			}
 		}
 		return failure(classifyError(status, text, key));
 	}
