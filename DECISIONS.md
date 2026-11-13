@@ -363,3 +363,149 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   le serveur d'écho pour la section « List item block » :
   `- second item with child ^item` puis `  - child of second item` ; 743 caractères de contenu + 13 de titre = 756
   affichés (731 avant + 25 pour le sous-élément).
+
+## Phase P3 — Création, frontmatter, réévaluation
+
+### Faits vérifiés dans le code de Refinr (lecture seule, 2026-11-13)
+- **`POST /api/v1/create-jira?projectKey=…`** (`BacklogController.createJira`) :
+  - corps : **liste d'`EpicDto`** (`List<EpicDto>`), c'est-à-dire le tableau `epics` de l'aperçu tel quel (champs
+    inconnus ignorés). `aiReady` / `aiReadyReason` envoyés sont **ignorés** : le verdict est **recalculé** sur le contenu
+    final (`CreateEditedBacklogService` → `StoryVerdicts.apply`), donc par un appel au modèle (fournisseur du verdict, ou
+    celui de l'analyse s'il n'y en a pas). Le verdict d'une story créée peut donc différer de celui de l'aperçu.
+  - `projectKey` facultatif (vide = projet par défaut du tracker) ; invalide pour le tracker actif → **400**
+    `{"success":false,"error":"Invalid projectKey: X"}`.
+  - réponse (`creationResponse`) : **200** tout créé (`success: true`, `message: "Successfully created N issues"`),
+    **207** partiel (`success: false`, `message: "Partially created: N issues created, M not created"`), **502** rien
+    créé (`success: false`, `error: "No issue could be created"`) ; dans les trois cas : `created`, `failed`, `epics`.
+    Autre exception → **500** `{"error":"Failed to create the issues"}` (sans listes).
+  - `created[]` : `{type: "epic"|"story"|"subtask", title, key, url}` (`url` null si inconnue), dans l'ordre de
+    création. `failed[]` : `{type, title, reason}` ; `reason` = message sûr de l'adaptateur (`IssueTrackerException`),
+    `"Unexpected error"` pour une autre erreur, ou `"Not created: parent epic|story <titre> failed"` pour les enfants
+    d'un parent en échec (ils sont listés aussi).
+  - `epics[]` : le backlog avec `jiraKey` (clé du ticket créé, null si non créé) et, par story, le **verdict recalculé**
+    `aiReady` / `aiReadyReason`. `jiraUrl` des stories **n'est pas rempli** à la création (`CreateBacklogService` ne pose
+    que la clé) : l'URL d'une story se lit dans `created[]` par sa **clé**.
+  - → Lien story ↔ verdict ↔ URL pour le frontmatter : `epics[].stories[]` (titre, `jiraKey`, `aiReady`,
+    `aiReadyReason`) joint à `created[]` par `key` (URL). Les titres ne servent pas de clé de jointure (doublons
+    possibles).
+  - Création jamais relancée par Refinr (POST non idempotent) ; un second envoi du même aperçu recrée tout.
+- **`POST /api/v1/reassess-story`** (`BacklogController.reassessStory`, `ReassessStoryService`) :
+  - corps `{issueKey, precision}` (deux chaînes non vides, sinon **400** `"issueKey and precision are required"`).
+  - réponse **200** `{success: true, issueKey, aiReady: boolean, aiReadyReason: string}` (nouveau verdict).
+  - côté tracker : la précision et le nouveau verdict sont ajoutés (OpenProject : **commentaire** + champ liste du
+    verdict ; Jira : ajout en fin de description + remplacement du label de verdict). Une réévaluation relancée
+    ajoute donc un second commentaire.
+  - **409** `"Issue KEY is not awaiting validation (label validation-necessaire absent)"` si la story n'a plus le
+    verdict `validation-necessaire` dans le tracker.
+  - **Pas de 404** : une clé inconnue fait échouer `findStory` (exception générique de l'adaptateur), attrapée par le
+    contrôleur → **500** `"Failed to reassess the story"` (cause dans les logs, `correlationId`). Modèle : **502**
+    (`"The AI model did not produce a valid result, even after retries"`, `"... output was truncated ..."`,
+    `"The AI provider is unavailable"`).
+- **Durées** : la réévaluation fait un appel « verdict » (90 s par défaut avec un fournisseur de verdict, sinon le
+  fournisseur et le délai de l'analyse, 300 s) avec relances et réparations, puis les appels au tracker ; la création
+  fait le recalcul des verdicts (lots de 10 stories, séquentiels) puis un appel au tracker par ticket. → Les deux
+  utilisent le délai d'analyse du plugin (`analysisTimeoutSeconds`, 1 560 s) et la même logique de fenêtre et de
+  notice que l'analyse. Délai dépassé : création → « état inconnu, vérifier le tracker », jamais de relance ;
+  réévaluation → « Refinr may still be reassessing… vérifier le tracker avant de relancer » (une relance ajoute un
+  second commentaire).
+
+### Vérifications demandées après le plan (mainteneur)
+- **Un 502 peut-il contenir des éléments créés ?** Non : `creationResponse` ne répond 502 que si `created` est vide
+  (créé ≥ 1 et échec ≥ 1 → 207). Le plugin ne s'appuie pas sur le code HTTP : il lit `created[]` dès que le corps
+  contient les listes (200, 207, 502) et écrit le frontmatter **dès que `created[]` n'est pas vide** (`partial` si
+  `failed[]` n'est pas vide) ; rien n'est écrit seulement si `created[]` est vide.
+- **Contrôle du tracker avant réévaluation** : Refinr n'expose pas l'adresse de son tracker (`GET /tracker` = nom
+  seul ; les URL de tickets n'arrivent que dans la réponse de création). Comparer l'hôte de l'URL d'une story du
+  frontmatter à « celui des URL que renvoie Refinr » n'est donc pas possible sans appel de création. → Comparaison
+  par **nom affiché** seulement. **Limite** : deux instances du même tracker (deux OpenProject, deux Jira) ne sont pas
+  distinguées ; une réévaluation pourrait viser une clé de l'autre instance (au pire 409 ou 500, aucun ticket créé).
+
+### Décisions P3
+- **Création** : bouton « Create in {tracker} » (nom lu sur `GET /tracker` pendant l'analyse ; inconnu → pas de
+  bouton) ; confirmation dans la fenêtre (projet modifiable, prérempli par `defaultProjectKey`, nombres,
+  recalcul du verdict annoncé, avertissement si la note a déjà un `refinr`) ; un seul clic (l'état change avant
+  l'envoi) ; délai `analysisTimeoutSeconds`, notice « Open result » si la fenêtre est fermée. Résultat : tickets
+  créés (lien seulement pour une URL `http(s)://`), verdict recalculé (et « preview: … » s'il diffère, pour les
+  titres uniques), `failed` avec `type`, `title`, `reason` tels quels.
+- **« Rien créé » seulement si c'est certain** (`nothingCreated`) : requête partie en échec avant l'envoi (erreurs
+  Chromium `ERR_CONNECTION_REFUSED`, `ERR_NAME_NOT_RESOLVED`, `ERR_ADDRESS_UNREACHABLE`, `ERR_INTERNET_DISCONNECTED`,
+  `ERR_CERT_*`, `ERR_SSL_*`…, ou Node `ECONNREFUSED`, `ENOTFOUND`…) ou refus de Refinr avant création (400 projet
+  invalide, 401, 403 hôte/CORS, 413). Tout le reste — délai, coupure après l'envoi (`ERR_CONNECTION_RESET`,
+  `ERR_EMPTY_RESPONSE`…), message réseau non reconnu (mobile), 5xx sans listes, réponse illisible — est **inconnu** :
+  `status: unknown` écrit et message « check the tracker before trying again ». `requestUrl` ne donne que le message
+  d'erreur : un message inconnu est traité comme le cas prudent.
+- **Frontmatter `refinr`** (schéma du plan) : `created` (date locale ISO 8601 avec décalage, `moment().format()`),
+  `tracker`, `project` (null = défaut), `status` (`complete` | `partial` | `unknown`), `epics[] {title,key,url}`,
+  `stories[] {title,key,url,verdict[,reassessed]}`, `failed[] {type,title,reason}`, `history[]`. Une nouvelle
+  création confirmée déplace l'ancien bloc dans `history` : **liste plate**, ordre chronologique, l'`history` de
+  l'ancien bloc remonté au même niveau, une valeur `refinr` non conforme gardée telle quelle (test d'une troisième
+  création). Écriture par `processFrontMatter` uniquement ; note supprimée ou YAML invalide → rien d'écrit, bouton
+  « Copy as YAML » (`stringifyYaml`).
+- **Exclusivité** : un verrou par note (`create` | `reassess`) ; « Reassess a story » est indisponible pendant une
+  création sur la note, la création est refusée pendant une réévaluation : jamais deux `processFrontMatter`
+  concurrents sur le même bloc.
+- **Réévaluation** : commande « Reassess a story » (note active avec au moins une story `validation-necessaire` dans
+  `refinr.stories`, bloc courant seulement) → choix → précision (obligatoire) → `reassess-story` → `verdict` et
+  `reassessed` mis à jour (rien d'autre). Messages : 409 « KEY is no longer awaiting validation in {tracker}; the note
+  was not updated. » (aucune cause supposée : la story a pu être réévaluée ailleurs, par exemple depuis l'interface web
+  de Refinr) ; 500 « Refinr could not reassess KEY (issue missing in {tracker}, or {tracker} unavailable) » + message
+  et `correlationId` ; délai « Refinr may still be reassessing… (a new attempt adds another comment) ».
+
+### Essai réel P3 (2026-11-13, Obsidian 1.15.1, Refinr local sur l'OpenProject local) — partiel
+- « Test connection » → « Tracker: OpenProject » ✓.
+- Aperçu de `P3/Order export spec` : 1 epic, 1 story `validation-necessaire`, 3 sous-tâches ; confirmation conforme
+  (projet, nombres, rappel du recalcul) ✓.
+- Création : « Created 5 issue(s) » ; la story #147 est **recalculée `ai-ready`** avec la mention « (preview:
+  validation-necessaire) » ✓ (confirme que le verdict de création peut différer de l'aperçu).
+- Frontmatter conforme au schéma ; `tags`, `status`, `aliases` intacts ✓. Le panneau Propriétés affiche `refinr` en
+  JSON (propriété objet).
+- « Reassess a story » masquée quand aucune story n'est en attente ✓.
+- Un 502 à l'analyse (modèle) est affiché proprement, avec le `correlationId` ✓.
+- **Non testé** (Gemini en 502, quota probablement épuisé) : deuxième création (`history`), réévaluation. **À la
+  main** (mainteneur) : modification d'une autre propriété depuis le panneau Propriétés. Pour la réévaluation, note
+  `P3/Customer data export (open points)` ajoutée au coffre de test : points ouverts explicites (format, encodage,
+  droits, contenu, livraison), pour un verdict `validation-necessaire` même après recalcul.
+- La fixture `P2/Spec main.md`, écrasée par erreur pendant l'essai, a été recréée à l'identique.
+
+### Reprise de l'essai réel P3 (2026-11-13)
+- Seconde création sur `P3/Order export spec` : avertissement « This note already has a Refinr backlog » (date,
+  tracker, nombre de stories, statut ; rien d'écrasé) ✓, puis « Create again » : 4 tickets, story #152
+  `validation-necessaire` ✓. `refinr.history` **à plat**, une seule entrée (l'ancienne création #146/#147) ✓ ;
+  `tags`, `status`, `aliases` intacts ✓.
+- « Reassess a story » visible seulement quand une story est en attente ; ne propose que #152 (pas les stories de
+  `history`) ✓. Fenêtre de précision et état « reassessing… » ✓.
+- Réévaluation en **502** (Gemini, `correlationId` 387b2d56-…) : message affiché proprement, frontmatter inchangé ✓.
+- **Non testé** (Gemini instable) : réévaluation réussie (`verdict`, `reassessed`) et 409. Panneau Propriétés : à
+  la main (mainteneur).
+- **502 et commentaire** (vérifié dans le code de Refinr) : un 502 de `reassess-story` vient uniquement de
+  `LlmFailures.translate`, qui n'enveloppe que l'appel au modèle, fait **avant** `applyReassessment` → **aucun
+  commentaire** n'est ajouté ; le message du 502 n'en parle pas (test). En revanche, un **500** peut survenir **après**
+  le commentaire sur OpenProject (commentaire, puis `PATCH` du verdict en échec) ; sur Jira, un seul `PUT`. → Le
+  message du 500 dit désormais : « If the issue exists, the precision may already have been added as a comment: check
+  it before trying again (a new attempt adds another comment). »
+- **409 validé** : #152 passé en `ai-ready` dans OpenProject, puis réévaluation depuis Obsidian → « 152 is no longer
+  awaiting validation in OpenProject; the note was not updated. » ; frontmatter inchangé sur le disque ✓.
+
+### Verdict de repli (écart trouvé à la seconde création)
+- **Constat** : le recalcul du verdict a buté sur le quota du modèle ; dans OpenProject, #152 porte « verdict
+  indisponible (no verdict) : validation humaine necessaire », mais le plugin affichait et écrivait
+  `validation-necessaire` comme un verdict normal.
+- **Vérifié dans Refinr** : aucun drapeau dans le contrat. Le repli est `ReadinessPolicy.unavailable(cause)` →
+  `aiReady: false` et `aiReadyReason` = `verdict indisponible (<cause>) : validation humaine necessaire` (seul
+  appelant : `StoryVerdicts`, à l'analyse comme à la création ; la réévaluation ne fait pas de repli, elle répond 502).
+  Ce texte arrive dans `epics[].stories[].aiReadyReason`.
+- **Décision** : repérage sur ce **libellé exact** (`src/verdict.ts`, expression ancrée, testée) :
+  - aperçu : badge « no verdict » (compté dans « without verdict ») au lieu de `validation-necessaire` ;
+  - résultat de création : « no verdict » + « AI unavailable, human validation required » ;
+  - frontmatter : `verdict: validation-necessaire` (ce qui est dans le tracker) **et `verdictSource: fallback`** ;
+    la story reste proposée à la réévaluation, et une réévaluation réussie retire `verdictSource`.
+- **Limite** : ce repérage dépend du libellé de Refinr, pas d'un contrat ; si le texte change, le repli redevient un
+  `validation-necessaire` ordinaire (jamais un faux `ai-ready`). **À proposer côté Refinr** (aucune issue « 429 »
+  trouvée : ouvertes #28 et #29 seulement) : exposer dans le contrat qu'un verdict est un repli, par exemple
+  `"aiReadySource": "model" | "fallback"` (ou `aiReady: null` + raison) sur chaque story de `analyze-preview` et de
+  `create-jira`, pour que les clients n'aient pas à analyser un texte.
+- **Issue Refinr ouverte** (non traitée dans cette phase) :
+  [chams-bensalem/refinr#32](https://github.com/chams-bensalem/refinr/issues/32) « Expose LLM unavailability in the
+  REST contract (rate limits and fallback verdicts) » — 429 du fournisseur → 503 explicite + `Retry-After` ;
+  `"aiReadySource": "model" | "fallback"` par story dans `analyze-preview` et `create-jira`. Quand elle sera livrée,
+  le plugin lira `aiReadySource` et gardera le repérage par libellé pour les versions plus anciennes de Refinr.
