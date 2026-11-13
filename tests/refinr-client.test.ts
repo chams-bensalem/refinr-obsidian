@@ -272,6 +272,37 @@ describe('createIssues', () => {
 	});
 });
 
+describe('reassessStory', () => {
+	it('posts the key and the precision, reads the new verdict', async () => {
+		const transport = fakeTransport({ '/api/v1/reassess-story': json(200, { success: true, issueKey: '#15', aiReady: true, aiReadyReason: 'Now clear' }) });
+		await expect(client(transport, KEY).reassessStory('#15', 'CSV, UTF-8', 60_000)).resolves.toEqual({
+			ok: true,
+			value: { issueKey: '#15', aiReady: true, reason: 'Now clear' },
+		});
+		expect(transport.requests[0]?.body).toBe('{"issueKey":"#15","precision":"CSV, UTF-8"}');
+	});
+
+	it.each<[string, HttpResponse | Error, object]>([
+		['409 not awaiting validation', json(409, { success: false, error: 'Issue #15 is not awaiting validation (label validation-necessaire absent)' }), { kind: 'http', status: 409 }],
+		['500 unknown key (Refinr has no 404)', json(500, { success: false, error: 'Failed to reassess the story', correlationId: 'c9' }), { kind: 'http', status: 500, correlationId: 'c9' }],
+		['502 model unavailable', json(502, { success: false, error: 'The AI provider is unavailable' }), { kind: 'http', status: 502 }],
+		['network error', new Error('net::ERR_CONNECTION_REFUSED'), { kind: 'network' }],
+	])('%s', async (_, answer, expected) => {
+		const transport = fakeTransport({ '/api/v1/reassess-story': answer });
+		const result = await client(transport, KEY).reassessStory('#15', 'p', 1000);
+		expect(result).toMatchObject({ ok: false, error: expected });
+		expect(JSON.stringify(result)).not.toContain(KEY);
+	});
+
+	it('stops waiting after the timeout', async () => {
+		vi.useFakeTimers();
+		const never: HttpTransport = () => new Promise<HttpResponse>(() => undefined);
+		const pending = client(never).reassessStory('#15', 'p', 2000);
+		await vi.advanceTimersByTimeAsync(2000);
+		await expect(pending).resolves.toEqual({ ok: false, error: { kind: 'timeout', timeoutMs: 2000 } });
+	});
+});
+
 describe('normalizeBaseUrl', () => {
 	it.each([
 		['http://localhost:8080', 'http://localhost:8080'],

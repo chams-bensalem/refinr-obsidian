@@ -51,6 +51,13 @@ export interface TrackerInfo {
 	name: string;
 }
 
+/** `POST /api/v1/reassess-story`: the new verdict of the story. */
+export interface Reassessment {
+	issueKey: string;
+	aiReady: boolean;
+	reason: string;
+}
+
 export interface RefinrClientOptions {
 	/** Base URL, already normalized by {@link normalizeBaseUrl}. */
 	baseUrl: string;
@@ -121,6 +128,11 @@ export class RefinrClient {
 	createIssues(epics: unknown[], projectKey: string, timeoutMs: number): Promise<Result<CreationResult>> {
 		const query = projectKey === '' ? '' : `?projectKey=${encodeURIComponent(projectKey)}`;
 		return this.send('POST', `/api/v1/create-jira${query}`, JSON.stringify(epics), timeoutMs, parseCreation, true);
+	}
+
+	/** `POST /api/v1/reassess-story`: calls the language model, then updates the issue (comment + verdict). */
+	reassessStory(issueKey: string, precision: string, timeoutMs: number): Promise<Result<Reassessment>> {
+		return this.send('POST', '/api/v1/reassess-story', JSON.stringify({ issueKey, precision }), timeoutMs, parseReassessment);
 	}
 
 	private get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
@@ -251,6 +263,13 @@ function parseSource(json: unknown): SourceInfo | null {
 		return null;
 	}
 	return { name: json.name, maxContentChars: json.maxContentChars };
+}
+
+function parseReassessment(json: unknown): Reassessment | null {
+	if (!isRecord(json) || typeof json.issueKey !== 'string' || typeof json.aiReady !== 'boolean') {
+		return null;
+	}
+	return { issueKey: json.issueKey, aiReady: json.aiReady, reason: typeof json.aiReadyReason === 'string' ? json.aiReadyReason : '' };
 }
 
 function parseTracker(json: unknown): TrackerInfo | null {

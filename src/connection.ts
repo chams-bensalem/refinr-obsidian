@@ -20,7 +20,7 @@ export interface ConnectionReport {
 }
 
 /** What the plugin was doing when an error happened; the advice differs (an analysis may still be running). */
-export type Operation = 'check' | 'analysis' | 'creation';
+export type Operation = 'check' | 'analysis' | 'creation' | 'reassessment';
 
 /** `GET /health`, then `/source` and `/tracker` (they need the API key, `/health` does not). */
 export async function checkConnection(client: RefinrClient, secret: SecretState): Promise<ConnectionCheck> {
@@ -127,6 +127,8 @@ function timeoutMessage(timeoutMs: number, operation: Operation): string {
 			return `No answer from Refinr after ${waited}. Refinr may still be analyzing the note: wait before starting again, or raise the analysis timeout in the plugin settings.`;
 		case 'creation':
 			return `No answer from Refinr after ${waited}. The issues may have been created anyway: check the tracker before trying again.`;
+		case 'reassessment':
+			return `No answer from Refinr after ${waited}. Refinr may still be reassessing the story: check the issue before trying again (a new attempt adds another comment).`;
 		case 'check':
 			return `No answer from Refinr after ${waited}.`;
 	}
@@ -146,4 +148,22 @@ export function unknownCreationMessage(error: RefinrError, baseUrl: string): str
 			? `The connection to Refinr was lost after the request was sent${error.detail === undefined ? '' : ` (${error.detail})`}.`
 			: describeError(error, baseUrl, 'check');
 	return `${cause} The issues may have been created anyway: check the tracker before trying again.`;
+}
+
+/** Messages of a failed reassessment; Refinr has no 404 (an unknown key is a 500). */
+export function reassessmentError(error: RefinrError, key: string, tracker: string, baseUrl: string, secret: SecretState): string {
+	const ref = error.correlationId === undefined ? '' : ` (correlation id ${error.correlationId})`;
+	if (error.kind === 'http' && error.status === 409) {
+		return `${key} is no longer awaiting validation in ${tracker}; the note was not updated.`;
+	}
+	if (error.kind === 'http' && error.status === 500) {
+		// The 500 may come after the comment was added (OpenProject: comment, then verdict update); a 502 never does
+		// (the model is called before the tracker is touched).
+		return (
+			`Refinr could not reassess ${key} (issue missing in ${tracker}, or ${tracker} unavailable)` +
+			`${error.detail === undefined ? '' : `: ${error.detail}`}.${ref} If the issue exists, the precision may already ` +
+			'have been added as a comment: check it before trying again (a new attempt adds another comment).'
+		);
+	}
+	return describeError(error, baseUrl, 'reassessment', secret);
 }
