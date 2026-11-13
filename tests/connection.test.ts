@@ -8,6 +8,7 @@ import {
 	checkConnection,
 	type ConnectionCheck,
 	describeError,
+	reassessmentError,
 	unknownCreationMessage,
 } from '../src/connection';
 
@@ -174,6 +175,40 @@ describe('unknownCreationMessage', () => {
 	it('500 without lists', () => {
 		expect(unknownCreationMessage({ kind: 'http', status: 500, detail: 'Failed to create the issues' }, BASE)).toBe(
 			'Refinr answered HTTP 500: Failed to create the issues. The issues may have been created anyway: check the tracker before trying again.',
+		);
+	});
+});
+
+describe('reassessmentError', () => {
+	const none = { kind: 'none' } as const;
+
+	it('409: no cause assumed', () => {
+		expect(reassessmentError({ kind: 'http', status: 409, detail: 'Issue #15 is not awaiting validation' }, '#15', 'OpenProject', BASE, none)).toBe(
+			'#15 is no longer awaiting validation in OpenProject; the note was not updated.',
+		);
+	});
+
+	it('500: issue missing or tracker unavailable (Refinr has no 404)', () => {
+		expect(reassessmentError({ kind: 'http', status: 500, detail: 'Failed to reassess the story', correlationId: 'c9' }, '#15', 'OpenProject', BASE, none)).toBe(
+			'Refinr could not reassess #15 (issue missing in OpenProject, or OpenProject unavailable): Failed to reassess the story. (correlation id c9)' +
+				' If the issue exists, the precision may already have been added as a comment: check it before trying again (a new attempt adds another comment).',
+		);
+	});
+
+	it('timeout: may still be reassessing, a new attempt adds a comment', () => {
+		expect(reassessmentError({ kind: 'timeout', timeoutMs: 1_560_000 }, '#15', 'OpenProject', BASE, none)).toBe(
+			'No answer from Refinr after 26 min. Refinr may still be reassessing the story: check the issue before trying again (a new attempt adds another comment).',
+		);
+	});
+
+	it('502: the model failed before the tracker was touched, no comment mentioned', () => {
+		expect(reassessmentError({ kind: 'http', status: 502, detail: 'The AI provider is unavailable', correlationId: 'c5' }, '#15', 'OpenProject', BASE, none)).not.toContain('comment');
+	});
+
+	it('network and 502 use the usual messages', () => {
+		expect(reassessmentError({ kind: 'network', detail: 'net::ERR_CONNECTION_REFUSED' }, '#15', 'OpenProject', BASE, none)).toContain('Could not reach Refinr');
+		expect(reassessmentError({ kind: 'http', status: 502, detail: 'The AI provider is unavailable' }, '#15', 'OpenProject', BASE, none)).toBe(
+			'Refinr answered HTTP 502: The AI provider is unavailable.',
 		);
 	});
 });

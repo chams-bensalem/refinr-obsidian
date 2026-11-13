@@ -4,10 +4,13 @@ import { moment, Notice, Plugin, stringifyYaml, type TFile } from 'obsidian';
 import { obsidianTransport } from './api/obsidian-transport';
 import { normalizeBaseUrl, RefinrClient } from './api/refinr-client';
 import {
+	applyReassessment,
 	applyRecord,
+	pendingStories,
 	type RecordMeta,
 	recordFromCreation,
 	recordSummary,
+	recordTracker,
 	type RefinrRecord,
 	unknownRecord,
 } from './backlog-record';
@@ -15,6 +18,7 @@ import {
 	buildConnectionReport,
 	checkConnection,
 	describeError,
+	reassessmentError,
 	type SecretState,
 	unknownCreationMessage,
 } from './connection';
@@ -23,6 +27,7 @@ import { providedTextLength } from './document';
 import { expandNote } from './embeds';
 import { VaultNotes } from './obsidian/vault-notes';
 import { type DoneState, type FrontmatterOutcome, PreviewModal } from './preview-modal';
+import { type PendingStory, ReassessModal, StoryPicker } from './reassess-modal';
 import { normalizeSettings, type RefinrSettings } from './settings';
 import { RefinrSettingTab } from './settings-tab';
 
@@ -56,6 +61,24 @@ export default class RefinrPlugin extends Plugin {
 				}
 				if (!checking) {
 					void this.analyzeNote(file);
+				}
+				return true;
+			},
+		});
+		this.addCommand({
+			id: 'reassess-story',
+			name: 'Reassess a story',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (file === null || file.extension !== 'md' || this.busy.has(file.path)) {
+					return false;
+				}
+				const stories = pendingStories(this.frontmatter(file));
+				if (stories.length === 0) {
+					return false;
+				}
+				if (!checking) {
+					new StoryPicker(this.app, stories, (story) => this.openReassessment(file, story)).open();
 				}
 				return true;
 			},
@@ -247,6 +270,75 @@ export default class RefinrPlugin extends Plugin {
 				message: `Could not write the "refinr" property of ${file.path} (${errorText(e)}). Copy the YAML and paste it into the note.`,
 				yaml,
 			};
+		}
+	}
+
+	private openReassessment(file: TFile, story: PendingStory): void {
+		const tracker = recordTracker(this.frontmatter(file)) ?? 'the tracker';
+		const modal: ReassessModal = new ReassessModal(this.app, story, tracker, (precision) => {
+			void this.reassess(file, story, precision, modal);
+		});
+		modal.open();
+	}
+
+	/** `reassess-story`, then the story's `verdict` and `reassessed` in the note's `refinr` property. */
+	private async reassess(file: TFile, story: PendingStory, precision: string, modal: ReassessModal): Promise<void> {
+		const baseUrl = normalizeBaseUrl(this.settings.refinrUrl);
+		const running = this.busy.get(file.path);
+		if (baseUrl === null || running !== undefined) {
+			modal.setState({
+				kind: 'error',
+				message:
+					baseUrl === null
+						? 'Set an http:// or https:// URL in the plugin settings.'
+						: `A ${running === 'create' ? 'creation' : 'reassessment'} is running on this note: try again when it ends.`,
+			});
+			return;
+		}
+		this.busy.set(file.path, 'reassess');
+		try {
+			const client = this.client(baseUrl);
+			const noteTracker = recordTracker(this.frontmatter(file));
+			const current = await client.tracker();
+			if (!current.ok) {
+				modal.setState({ kind: 'error', message: describeError(current.error, baseUrl, 'check', this.secretState()) });
+				return;
+			}
+			// Only the display name can be compared: Refinr does not expose the tracker's address (see DECISIONS.md).
+			if (noteTracker !== null && noteTracker !== current.value.name) {
+				modal.setState({
+					kind: 'error',
+					message: `The backlog of this note was created in ${noteTracker}, but Refinr now uses ${current.value.name}. Nothing was sent.`,
+				});
+				return;
+			}
+			const tracker = current.value.name;
+			const result = await client.reassessStory(story.key, precision, this.timeoutMs);
+			if (result.ok) {
+				const verdict = result.value.aiReady ? 'ai-ready' : 'validation-necessaire';
+				let found = false;
+				let frontmatter: string;
+				let frontmatterOk = false;
+				try {
+					await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+						found = applyReassessment(fm, story.key, verdict, moment().format());
+					});
+					frontmatterOk = found;
+					frontmatter = found
+						? `Verdict of ${story.key} updated in the "refinr" property of ${file.path}.`
+						: `${story.key} is no longer in the "refinr" property of ${file.path}: the note was not updated.`;
+				} catch (e) {
+					frontmatter = `Could not update the "refinr" property of ${file.path} (${errorText(e)}): set the verdict of ${story.key} to ${verdict} by hand.`;
+				}
+				modal.setState({ kind: 'done', verdict, reason: result.value.reason, frontmatter, frontmatterOk });
+			} else {
+				modal.setState({ kind: 'error', message: reassessmentError(result.error, story.key, tracker, baseUrl, this.secretState()) });
+			}
+			if (!modal.isShown) {
+				this.notify(`Refinr: the reassessment of ${story.key} has ended.`, 'Show result', () => modal.open());
+			}
+		} finally {
+			this.busy.delete(file.path);
 		}
 	}
 
