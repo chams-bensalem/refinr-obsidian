@@ -486,6 +486,25 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 - **409 validé** : #152 passé en `ai-ready` dans OpenProject, puis réévaluation depuis Obsidian → « 152 is no longer
   awaiting validation in OpenProject; the note was not updated. » ; frontmatter inchangé sur le disque ✓.
 
+### Réévaluation réussie (fin de l'essai réel P3, 2026-11-13, modèle Gemini 3.8)
+- **Obsidian** : « New verdict: ai-ready » avec la raison de Refinr, puis « Verdict of 152 updated » ✓.
+- **Frontmatter** (`P3/Order export spec`) : story #152 → `verdict: ai-ready`,
+  `reassessed: 2026-11-13T23:50:05+01:00` ; le reste du bloc `refinr` (`created`, `tracker`, `project`, `status`,
+  `epics`, `failed`) et `history` intacts ✓, ainsi que `tags`, `status`, `aliases`.
+- **OpenProject** : champ verdict à `ai-ready`, **un seul** commentaire de précision ✓. Les deux réévaluations en 502
+  précédentes n'en avaient laissé aucun ✓ (confirme l'analyse du code : un 502 vient de l'appel au modèle, fait avant
+  `applyReassessment`).
+- **Non observé** : le retrait de `verdictSource` par une réévaluation réussie. #152 a été créée avant le correctif du
+  verdict de repli, son bloc n'a jamais porté `verdictSource`. Couvert par le test « a reassessment replaces a
+  fallback verdict: verdictSource removed » (`tests/backlog-record.test.ts`).
+- **Reste à la main** (mainteneur) : modification d'une autre propriété depuis le panneau Propriétés.
+- **Constat côté Refinr** : la **description** de #152 garde l'ancienne ligne « verdict indisponible (no verdict) :
+  validation humaine necessaire ». Vérifié dans le code de Refinr (`724624b`, lecture seule) : sur OpenProject,
+  `applyReassessment` ajoute précision et nouveau verdict **en commentaire** et ne touche pas la description ; sur
+  Jira, ils sont ajoutés **à la fin** de la description, sous l'ancienne ligne, qui reste. Le verdict à jour est
+  celui du champ (OpenProject) ou du label (Jira). Signalé dans
+  [chams-bensalem/refinr#32](https://github.com/chams-bensalem/refinr/issues/32). Aucun changement côté plugin.
+
 ### Verdict de repli (écart trouvé à la seconde création)
 - **Constat** : le recalcul du verdict a buté sur le quota du modèle ; dans OpenProject, #152 porte « verdict
   indisponible (no verdict) : validation humaine necessaire », mais le plugin affichait et écrivait
