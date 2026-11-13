@@ -573,15 +573,38 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
 
 ### Workflow `.github/workflows/release.yml`
 - **Déclencheur** : push d'un tag `'[0-9]+.[0-9]+.[0-9]+'` (motif de filtre GitHub) ; un tag `v0.1.0` ne déclenche rien.
-- **Permissions** : `permissions: {}` au niveau du workflow ; sur le seul job, chacune commentée : `contents: write`
-  (création de la release et envoi des fichiers), `id-token: write` et `attestations: write` (attestation).
-  `actions/checkout` avec `persist-credentials: false` : le jeton n'est pas laissé dans `.git/config` pendant
-  `npm ci` ; seules les étapes d'attestation et de release le reçoivent. Tag passé par `env` (`TAG`), jamais interpolé
-  dans le script.
-- **Étapes** : commit sur `main`, puis contrôle des versions **avant** l'installation (échec rapide), `npm ci`, lint,
-  tests, build (Node de `.nvmrc`, 24), attestation, puis `gh release create "$TAG" --verify-tag --draft --title "$TAG"
-  --generate-notes` avec les trois fichiers. Actions épinglées par SHA (checkout et setup-node aux mêmes versions que
-  `ci.yml`). `concurrency` par tag, sans annulation.
+- **Deux jobs** (décision du mainteneur, 2026-11-13, après une revue de sécurité automatique du premier workflow à un
+  seul job) : avec `id-token: write` sur un job, **toutes** ses étapes reçoivent de quoi obtenir un jeton OIDC
+  (`ACTIONS_ID_TOKEN_REQUEST_URL`/`_TOKEN`), y compris `npm ci`, le lint, les tests et le build, qui exécutent les
+  devDependencies et le code du dépôt.
+  - **`build`** (`contents: read`) : checkout `fetch-depth: 0` et `persist-credentials: false`, contrôle « tag sur
+    `main` », contrôle des versions (avant l'installation : échec rapide), `npm ci --ignore-scripts --no-audit
+    --no-fund`, lint, tests, build (Node de `.nvmrc`, 24), puis envoi de `main.js`, `manifest.json`, `styles.css`
+    (`actions/upload-artifact` **v7.0.2**, SHA `cf430e030ddbb5b0abf93d22962f4752f3646cd9`, `if-no-files-found: error`,
+    `retention-days: 1`).
+  - **`release`** (`needs: build` ; `contents: write` pour la release et ses fichiers, `id-token: write` pour le
+    certificat Sigstore, `attestations: write` pour enregistrer l'attestation, chacune commentée) : **ni checkout, ni
+    npm, ni code du dépôt**. `actions/download-artifact` **v8.0.2** (SHA `9000827ccba6bdab643e8b6fd33ac0654aef8333` ;
+    empreinte de l'artefact vérifiée par défaut, `digest-mismatch: error`), contrôle que les trois fichiers sont
+    présents et non vides (taille et SHA-256 affichés dans le journal), attestation, puis `gh release create "$TAG"
+    --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "$TAG" --generate-notes` avec les trois fichiers.
+  - `permissions: {}` au niveau du workflow. Tag passé par `env` (`TAG`), jamais interpolé dans un script. Actions
+    épinglées par SHA (checkout et setup-node aux mêmes versions que `ci.yml`), mises à jour par Dependabot
+    (`github-actions`). `concurrency` par tag, sans annulation.
+- **Ce que la séparation protège** : le jeton OIDC (donc la capacité de signer une attestation au nom du dépôt) et le
+  droit d'écriture (`contents: write` : releases, tags, contenu du dépôt) sont **hors de portée de tout code exécuté au
+  build** — devDependencies, scripts npm, tests, configuration esbuild/ESLint. Le job `build` n'a qu'un jeton en
+  lecture, non conservé dans `.git/config`. Le job `release` n'exécute que des actions épinglées et `gh`.
+- **Ce qu'elle ne protège pas** : un outil de build compromis (esbuild, TypeScript, un plugin ESLint…) qui modifierait
+  `main.js` pendant le build. Le fichier modifié serait transmis, attesté et publié comme un fichier légitime :
+  l'attestation prouve **où et à partir de quel commit** le fichier a été construit, pas que la chaîne d'outils était
+  saine. Ce risque n'est couvert que par le lockfile (`package-lock.json`, versions exactes et empreintes
+  d'intégrité), `npm ci` (installation strictement conforme au lockfile), `--ignore-scripts` (aucun script
+  d'installation exécuté) et Dependabot (mises à jour relues par PR), ainsi que par la relecture du brouillon avant
+  publication.
+- **`--ignore-scripts`** : sans effet sur le build (le binaire d'esbuild vient de sa dépendance optionnelle de
+  plateforme ; son `postinstall` n'était déjà pas exécuté, cf. P1). Vérifié localement : `npm ci --ignore-scripts`
+  puis `npm run build` réussit.
 - **Contrôle des versions** (`node version-bump.mjs check <tag>`) : tag au format `x.y.z` ; `manifest.json`
   `version` = tag ; `package.json` `version` = tag (gardé par décision du mainteneur : `npm version` les garde
   alignés, un écart signale une édition à la main) ; `versions.json[tag]` présent et égal au `minAppVersion` du
@@ -592,9 +615,9 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
   (aussi pour un tag annoté). Échec avec un message `::error::` (commit refusé, marche à suivre) ; échec explicite aussi
   si `origin/main` manque. Ainsi seul du code relu et fusionné par PR est publié ; le README pose le tag sur `main`
   après la fusion.
-- **actionlint** (v1.7.12, image Docker `rhysd/actionlint`, lancé une fois hors du dépôt, 2026-11-13) : aucune
-  erreur sur `release.yml` ni `ci.yml` (« Found 0 errors in 2 files »), blocs `run:` compris (shellcheck 0.11.0 de
-  l'image). Pas ajouté à `ci.yml` (proposition faite au mainteneur).
+- **actionlint** (v1.7.12, image Docker `rhysd/actionlint`, lancé hors du dépôt, 2026-11-13, sur la version à un job
+  puis sur la version à deux jobs) : aucune erreur sur `release.yml` ni `ci.yml` (« Found 0 errors in 2 files »),
+  blocs `run:` compris (shellcheck 0.11.0 de l'image). Pas ajouté à `ci.yml` (proposition faite au mainteneur).
 
 ### `npm version` et `version-bump.mjs`
 - Le script `"version"` du gabarit existait déjà (`node version-bump.mjs && git add manifest.json versions.json`) :
