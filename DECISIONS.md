@@ -202,7 +202,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 - **`postinstall` d'esbuild non exécuté** (npm 11 : `allowScripts`) : sans effet, le binaire de la plateforme est
   installé par les dépendances optionnelles (`npx esbuild --version` → 0.28.2).
 - **CI** (`.github/workflows/ci.yml`, actions épinglées par SHA comme dans `refinr`) : lint + build + tests (Node 22,
-  24), en-têtes SPDX, gitleaks 8.30.1 (CLI officielle, somme de contrôle vérifiée, historique complet), absence
+  24), en-têtes SPDX, gitleaks 8.30.1 (CLI officielle, somme de contrôle vérifiée — empreinte écrite en dur depuis P4 —, historique complet), absence
   d'attribution IA dans les messages des commits poussés (`scripts/check-ai-attribution.sh`, même motif que le hook).
   Le workflow de release du gabarit est reporté à P4 (cf. « Phase P4 — Release »).
 - **Hooks versionnés** repris de `refinr` (`pre-commit` gitleaks + SPDX, `commit-msg` anti-attribution) ;
@@ -627,6 +627,16 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
   pour les blocs `run:`, est préinstallé sur `ubuntu-latest` (0.9.0, image runner Ubuntu 24.04 `20261111.370.1`).
   Version mise à jour à la main (Dependabot ne suit pas une variable d'environnement). Job reproduit dans un conteneur
   `ubuntu:24.04` amd64 : somme « OK », « Found 0 errors in 2 files ».
+- **Empreintes SHA-256 écrites en dur dans `ci.yml`** (décision du mainteneur, 2026-11-13), pour actionlint et
+  gitleaks, au lieu de les lire dans le `checksums.txt` téléchargé : un fichier de sommes pris à la même source que
+  l'archive ne protège que contre un téléchargement corrompu, pas contre une release remplacée. Variables
+  `ACTIONLINT_SHA256` et `GITLEAKS_SHA256`, vérifiées par `echo "<sha256>  <archive>" | sha256sum -c -`.
+  - actionlint 1.7.12 `linux_amd64` : `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8` ;
+    gitleaks 8.30.1 `linux_x64` : `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`. Relevées dans
+    les `checksums.txt` officiels et recoupées par `sha256sum` des archives téléchargées (identiques).
+  - **Mise à jour** (commentaire au-dessus de chaque variable) : changer la version, copier la ligne de l'archive
+    depuis `<outil>_<version>_checksums.txt` de la release, la recouper avec `sha256sum` de l'archive téléchargée.
+    Toujours à la main : Dependabot ne suit ni ces versions ni ces empreintes.
 
 ### `npm version` et `version-bump.mjs`
 - Le script `"version"` du gabarit existait déjà (`node version-bump.mjs && git add manifest.json versions.json`) :
