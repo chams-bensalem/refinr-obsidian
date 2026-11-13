@@ -200,12 +200,17 @@ For the maintainer. Obsidian installs the files attached to the GitHub release w
    `npm version <x.y.z>`. It sets the version in `package.json`, `package-lock.json` and `manifest.json` and adds
    `"<x.y.z>": "<minAppVersion>"` to `versions.json`. It creates no commit and no tag (`.npmrc`).
 2. Commit (`chore: release <x.y.z>`), open a pull request, merge it into `main`.
-3. Tag the merge commit on `main` and push the tag:
+3. Only after the merge, tag the merge commit **on `main`** and push the tag:
    `git switch main && git pull && git tag -a <x.y.z> -m <x.y.z> && git push origin <x.y.z>`.
-4. The `release` workflow checks that the tag, `manifest.json`, `package.json` and `versions.json` agree (it stops
-   with the list of mismatches otherwise), runs lint, tests and build, then creates a **draft** release with
-   `main.js`, `manifest.json` and `styles.css` attached.
-5. Review the draft on GitHub, write the release notes, and publish it.
+   A tag on a branch commit that is not in the history of `main` is refused by the workflow.
+4. The `release` workflow checks that the tagged commit is in the history of `main`, and that the tag,
+   `manifest.json`, `package.json` and `versions.json` agree (it stops with a clear message otherwise). It then runs
+   lint, tests and build, attests the build provenance of `main.js`, `manifest.json` and `styles.css`, and creates a
+   **draft** release with these three files attached and generated release notes.
+5. Review the draft on GitHub, edit the release notes, and publish it.
+
+Build provenance attestations need a public repository (or GitHub Enterprise Cloud for a private one). Anyone can
+check a downloaded file with `gh attestation verify main.js --repo chams-bensalem/refinr-obsidian`.
 
 If the workflow fails, delete the tag (`git push origin :refs/tags/<x.y.z>` and `git tag -d <x.y.z>`), fix the files
 through a new pull request, and tag again.
