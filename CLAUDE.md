@@ -23,6 +23,8 @@ Aucune logique LLM ni tracker dans le plugin.
 - Attribution IA : `scripts/check-ai-attribution.sh <base>..<head>` (job CI)
 - Hooks git versionnés (`.githooks/` : pre-commit gitleaks + en-têtes SPDX, commit-msg anti-attribution IA) :
   `git config core.hooksPath .githooks` une fois par clone
+- Identité des commits (locale au dépôt, pas `--global`), une fois par clone :
+  `git config user.email "16765031+chams-bensalem@users.noreply.github.com"` (vérifier : `git config user.email`)
 - CI : `.github/workflows/ci.yml` (lint + build + tests sur Node 22 et 24, SPDX, gitleaks, anti-attribution IA,
   actionlint)
 - Version : `npm version <x.y.z>` (`version-bump.mjs` : `manifest.json` + `versions.json`, ni commit ni tag) ·
