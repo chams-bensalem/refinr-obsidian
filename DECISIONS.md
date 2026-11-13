@@ -502,7 +502,10 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 - **Non observé** : le retrait de `verdictSource` par une réévaluation réussie. #152 a été créée avant le correctif du
   verdict de repli, son bloc n'a jamais porté `verdictSource`. Couvert par le test « a reassessment replaces a
   fallback verdict: verdictSource removed » (`tests/backlog-record.test.ts`).
-- **Reste à la main** (mainteneur) : modification d'une autre propriété depuis le panneau Propriétés.
+- ~~Reste à la main (mainteneur) : modification d'une autre propriété depuis le panneau Propriétés.~~ → **Fait par le
+  mainteneur (2026-11-14)** : une autre propriété de la note modifiée depuis le panneau Propriétés ; le bloc `refinr`
+  (`stories`, `history`) reste intact et en YAML valide, et le plugin le relit toujours (« Reassess a story »,
+  avertissement lors d'une nouvelle création) ✓. L'essai réel P3 est ainsi complet.
 - **Constat côté Refinr** : la **description** de #152 garde l'ancienne ligne « verdict indisponible (no verdict) :
   validation humaine necessaire ». Vérifié dans le code de Refinr (`724624b`, lecture seule) : sur OpenProject,
   `applyReassessment` ajoute précision et nouveau verdict **en commentaire** et ne touche pas la description ; sur
