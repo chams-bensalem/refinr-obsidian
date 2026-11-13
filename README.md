@@ -8,7 +8,8 @@ configured on that server, and records what was created in the note's frontmatte
 `ai-ready` (clear enough for a coding agent) or `validation-necessaire` (needs a human decision first). A story awaiting
 validation can be reassessed from the note once you have added the missing precision.
 
-> Status: 0.1.0, not yet in the Obsidian community directory. Tested on desktop (macOS) only.
+> Status: 0.1.0, not yet in the Obsidian community directory. Desktop only for now (Windows, macOS, Linux): mobile has
+> not been tested yet.
 
 ## Requirements
 
@@ -186,8 +187,9 @@ of the description in Jira), computes a new verdict, and the plugin updates `ver
   `502 "The AI provider is unavailable"` (analysis, reassessment), or applies the fallback verdict at creation. Try
   again later.
 - **Long operations cannot be cancelled**: when the plugin stops waiting, Refinr may still finish the work.
-- **Mobile is not tested yet**: network calls, the secret storage and the layout of the windows have only been checked
-  on desktop. A phone also cannot reach a Refinr server on `localhost`.
+- **Desktop only for now (Windows, macOS, Linux): mobile has not been tested yet.** Network calls, the secret storage
+  and the layout of the windows have only been checked on desktop, and a phone cannot reach a Refinr server on
+  `localhost`. The plugin is therefore not offered on iOS and Android in 0.1.0.
 
 ## License
 
