@@ -617,7 +617,16 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
   après la fusion.
 - **actionlint** (v1.7.12, image Docker `rhysd/actionlint`, lancé hors du dépôt, 2026-11-13, sur la version à un job
   puis sur la version à deux jobs) : aucune erreur sur `release.yml` ni `ci.yml` (« Found 0 errors in 2 files »),
-  blocs `run:` compris (shellcheck 0.11.0 de l'image). Pas ajouté à `ci.yml` (proposition faite au mainteneur).
+  blocs `run:` compris (shellcheck 0.11.0 de l'image).
+- **actionlint dans `ci.yml`** (décision du mainteneur, 2026-11-13) : job dédié `workflows`, nom affiché
+  **`actionlint`** (nom exact du check à rendre obligatoire dans le ruleset de `main`, mis à jour par le mainteneur),
+  `permissions: contents: read`, checkout `persist-credentials: false`. **Binaire officiel** v1.7.12
+  (`actionlint_1.7.12_linux_amd64.tar.gz`), somme vérifiée contre `actionlint_1.7.12_checksums.txt` de la même release,
+  extrait dans `$RUNNER_TEMP` (hors du dépôt), comme le job gitleaks : aucune action tierce. Préféré à l'image Docker
+  (épinglage par digest possible, mais un `docker run` de plus et une image à suivre à la main). shellcheck, utilisé
+  pour les blocs `run:`, est préinstallé sur `ubuntu-latest` (0.9.0, image runner Ubuntu 24.04 `20261111.370.1`).
+  Version mise à jour à la main (Dependabot ne suit pas une variable d'environnement). Job reproduit dans un conteneur
+  `ubuntu:24.04` amd64 : somme « OK », « Found 0 errors in 2 files ».
 
 ### `npm version` et `version-bump.mjs`
 - Le script `"version"` du gabarit existait déjà (`node version-bump.mjs && git add manifest.json versions.json`) :
@@ -637,10 +646,14 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
   listés, JSON illisible, sous-commande inconnue, et cohérence des fichiers du dépôt pour leur propre version.
 
 ### Procédure (résumé, détail dans le README, section « Releasing »)
-1. Branche : `minAppVersion` à la main si besoin, `npm version <x.y.z>`, commit `chore: release <x.y.z>`, PR, fusion.
-2. Sur `main` : `git tag -a <x.y.z> -m <x.y.z>` puis `git push origin <x.y.z>`.
-3. Le workflow crée le brouillon ; le mainteneur relit, rédige les notes et publie.
-4. Première version seulement : soumission sur community.obsidian.md (cf. P0, « Soumission »).
+1. Branche : `minAppVersion` à la main si besoin, `npm version <x.y.z>`, commit `chore: release <x.y.z>`, PR.
+2. Fusion de la PR sur `main`.
+3. Première version seulement : dépôt passé en **public** par le mainteneur (sinon l'attestation échoue).
+4. Sur `main` : `git tag -a <x.y.z> -m <x.y.z>` puis `git push origin <x.y.z>` ; le workflow crée le brouillon.
+5. Le mainteneur relit puis publie le brouillon.
+6. Première version seulement : soumission sur community.obsidian.md (cf. P0, « Soumission »).
+- Pour recommencer : `gh release delete <x.y.z> --cleanup-tag --yes` (brouillon et tag distant ; sans brouillon,
+  `git push origin :refs/tags/<x.y.z>`), `git tag -d <x.y.z>`, correction, puis nouveau tag sur `main`.
 
 ## Dépendances
 

@@ -23,7 +23,8 @@ Aucune logique LLM ni tracker dans le plugin.
 - Attribution IA : `scripts/check-ai-attribution.sh <base>..<head>` (job CI)
 - Hooks git versionnés (`.githooks/` : pre-commit gitleaks + en-têtes SPDX, commit-msg anti-attribution IA) :
   `git config core.hooksPath .githooks` une fois par clone
-- CI : `.github/workflows/ci.yml` (lint + build + tests sur Node 22 et 24, SPDX, gitleaks, anti-attribution IA)
+- CI : `.github/workflows/ci.yml` (lint + build + tests sur Node 22 et 24, SPDX, gitleaks, anti-attribution IA,
+  actionlint)
 - Version : `npm version <x.y.z>` (`version-bump.mjs` : `manifest.json` + `versions.json`, ni commit ni tag) ·
   contrôle : `node version-bump.mjs check <x.y.z>`
 - Release : `.github/workflows/release.yml` sur push d'un tag `x.y.z` (sans `v`) → release en brouillon ; procédure
