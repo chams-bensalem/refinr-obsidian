@@ -64,9 +64,14 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
 - **Fonctionnement sur mobile** : `requestUrl` est l'API multiplateforme fournie par Obsidian, mais la documentation ne
   le dit pas explicitement — **documenté, à confirmer à l'exécution**. Idem pour un Refinr en `http://` (non TLS) ou
   sur `localhost`, inaccessible depuis un téléphone.
-- → **`isDesktopOnly: false`** : aucune API Node/Electron n'est nécessaire (règle de soumission : Node/Electron ⇒
+- → ~~`isDesktopOnly: false`~~ : aucune API Node/Electron n'est nécessaire (règle de soumission : Node/Electron ⇒
   `true` obligatoire). Lint et revue vérifieront qu'aucun import Node ne s'y glisse, et qu'il n'y a pas de lookbehind
   dans les regex (non pris en charge sur iOS < 16.4).
+  **Révisé en P4 (décision du mainteneur) : `isDesktopOnly: true` pour la 0.1.0.** Le code reste compatible mobile
+  (aucune API Node/Electron), mais rien n'a été vérifié sur mobile : en-tête `Origin` de `requestUrl` (403 CORS
+  possible), `SecretStorage`, rendu des fenêtres, et un téléphone ne joint pas un Refinr sur `localhost`. Plutôt que de
+  proposer une expérience non testée, le plugin n'est pas proposé sur iOS/Android ; retour à `false` après un essai
+  mobile, sans changement de code.
 
 ### Note active et frontmatter
 - Note active : `workspace.getActiveFile()` (ou `getActiveViewOfType(MarkdownView)`) ; `workspace.activeLeaf` est
@@ -156,7 +161,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
   `SPDX-License-Identifier: MIT` dès P1. Pas de CLA.
 
 ### Ajustements reportés dans le plan (P1–P4)
-- P1 : `minAppVersion 1.13.0` (relevée en P1, cf. section P1), `isDesktopOnly false`, `id refinr`, `obsidian` épinglé, TypeScript 5.x, lint
+- P1 : `minAppVersion 1.13.0` (relevée en P1, cf. section P1), `isDesktopOnly false` (`true` pour la 0.1.0, cf. P4), `id refinr`, `obsidian` épinglé, TypeScript 5.x, lint
   `eslint-plugin-obsidianmd`, en-têtes SPDX MIT, `LICENSE` MIT ; clé d'API via `SecretComponent`/`SecretStorage` (plus de
   « champ masqué » dans `data.json`) ; réglage « taille max envoyée » remplacé par `maxContentChars` lu sur `/source` ;
   délais d'attente côté plugin ; client HTTP sur `requestUrl` avec `throw: false`, testé via un transport injecté.

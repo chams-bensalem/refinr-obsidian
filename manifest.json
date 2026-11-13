@@ -6,5 +6,5 @@
 	"description": "Turn the active note into an agent-ready backlog (Epics, Stories, Sub-tasks) in Jira or OpenProject, via Refinr.",
 	"author": "Chams Bensalem",
 	"authorUrl": "https://github.com/chams-bensalem",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }
