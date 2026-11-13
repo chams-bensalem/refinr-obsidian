@@ -179,6 +179,60 @@ describe('timeout', () => {
 	});
 });
 
+describe('analyzePreview', () => {
+	const PREVIEW = { success: true, message: 'Preview generated successfully', epics: [{ name: 'E', stories: [] }] };
+
+	it('posts the note as text with the API key and parses the preview', async () => {
+		const transport = fakeTransport({ '/api/v1/analyze-preview': json(200, PREVIEW) });
+		const result = await client(transport, KEY).analyzePreview({ content: '# Body', title: 'Spec' }, 60_000);
+		expect(result.ok && result.value.totals.epics).toBe(1);
+		expect(transport.requests[0]).toEqual({
+			url: `${BASE}/api/v1/analyze-preview`,
+			method: 'POST',
+			headers: { Accept: 'application/json', 'X-API-Key': KEY },
+			body: '{"content":"# Body","title":"Spec"}',
+		});
+	});
+
+	it('uses the analysis timeout, not the check timeout', async () => {
+		vi.useFakeTimers();
+		const never: HttpTransport = () => new Promise<HttpResponse>(() => undefined);
+		const pending = client(never, null, 1000).analyzePreview({ content: 'x', title: 't' }, 1_560_000);
+		await vi.advanceTimersByTimeAsync(1_559_999);
+		let settled = false;
+		void pending.then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		await expect(pending).resolves.toEqual({ ok: false, error: { kind: 'timeout', timeoutMs: 1_560_000 } });
+	});
+
+	it('reports 413 and 502 with Refinr messages', async () => {
+		const tooLarge = fakeTransport({
+			'/api/v1/analyze-preview': json(413, { success: false, error: 'The document exceeds the maximum size of 200000 characters' }),
+		});
+		await expect(client(tooLarge).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toEqual({
+			ok: false,
+			error: { kind: 'too-large', status: 413, detail: 'The document exceeds the maximum size of 200000 characters' },
+		});
+		const unavailable = fakeTransport({ '/api/v1/analyze-preview': json(502, { success: false, error: 'LLM provider unavailable' }) });
+		await expect(client(unavailable).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toMatchObject({
+			ok: false,
+			error: { kind: 'http', status: 502, detail: 'LLM provider unavailable' },
+		});
+	});
+
+	it('refuses an answer without epics', async () => {
+		const transport = fakeTransport({ '/api/v1/analyze-preview': json(200, { success: true }) });
+		await expect(client(transport).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toEqual({
+			ok: false,
+			error: { kind: 'invalid-response', status: 200 },
+		});
+	});
+});
+
 describe('normalizeBaseUrl', () => {
 	it.each([
 		['http://localhost:8080', 'http://localhost:8080'],

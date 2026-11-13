@@ -1,4 +1,89 @@
 /* SPDX-FileCopyrightText: 2026 Chams Bensalem */
 /* SPDX-License-Identifier: MIT */
 
-/* No plugin-specific styles yet: settings are rendered by Obsidian (declarative settings API). */
+/* Preview window: Obsidian variables only, so that themes apply. */
+.refinr-preview .refinr-muted {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.refinr-preview .refinr-error {
+	color: var(--text-error);
+	white-space: pre-wrap;
+}
+
+.refinr-preview .refinr-warnings {
+	border: 1px solid var(--text-warning);
+	border-left-width: 4px;
+	border-radius: var(--radius-s);
+	background-color: var(--background-secondary);
+	padding: var(--size-4-2) var(--size-4-3);
+	margin-bottom: var(--size-4-3);
+}
+
+.refinr-preview .refinr-warnings-title {
+	color: var(--text-warning);
+	font-weight: var(--font-semibold);
+	margin-top: 0;
+}
+
+.refinr-preview .refinr-totals {
+	font-weight: var(--font-semibold);
+}
+
+.refinr-preview .refinr-epic {
+	border-top: 1px solid var(--background-modifier-border);
+	padding-top: var(--size-4-2);
+}
+
+.refinr-preview .refinr-description,
+.refinr-preview .refinr-user-story,
+.refinr-preview .refinr-verdict-reason {
+	white-space: pre-wrap;
+}
+
+.refinr-preview .refinr-story {
+	margin: var(--size-4-2) 0;
+	padding-left: var(--size-4-2);
+}
+
+.refinr-preview .refinr-story summary {
+	cursor: pointer;
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-2);
+	align-items: baseline;
+}
+
+.refinr-preview .refinr-story-title {
+	font-weight: var(--font-semibold);
+}
+
+.refinr-preview .refinr-verdict {
+	border-radius: var(--radius-s);
+	padding: 0 var(--size-4-1);
+	font-size: var(--font-ui-smaller);
+	border: 1px solid currentColor;
+}
+
+.refinr-preview .refinr-verdict-ai-ready {
+	color: var(--text-success);
+}
+
+.refinr-preview .refinr-verdict-validation-necessaire {
+	color: var(--text-warning);
+}
+
+.refinr-preview .refinr-verdict-unknown {
+	color: var(--text-muted);
+}
+
+.refinr-preview .refinr-points {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.refinr-preview .refinr-subheading {
+	font-weight: var(--font-semibold);
+	margin-bottom: 0;
+}
