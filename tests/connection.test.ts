@@ -93,9 +93,9 @@ describe('describeError', () => {
 		expect(describeError(error, BASE, 'check')).toBe(expected);
 	});
 
-	it('timeout of an analysis says Refinr may still be analysing', () => {
+	it('timeout of an analysis says Refinr may still be analyzing', () => {
 		expect(describeError({ kind: 'timeout', timeoutMs: 1_560_000 }, BASE, 'analysis')).toBe(
-			'No answer from Refinr after 26 min. Refinr may still be analysing the note: wait before starting again, or raise the analysis timeout in the plugin settings.',
+			'No answer from Refinr after 26 min. Refinr may still be analyzing the note: wait before starting again, or raise the analysis timeout in the plugin settings.',
 		);
 	});
 

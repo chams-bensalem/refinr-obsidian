@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
-import { type HttpTransport, TimeoutError, withTimeout } from './http';
+import { parsePreview, type Preview } from '../preview';
+import { type HttpRequest, type HttpTransport, TimeoutError, withTimeout } from './http';
 
 /** Why a call to Refinr failed. Each kind maps to an actionable message (see `connection.ts`). */
 export type RefinrErrorKind =
@@ -104,20 +105,38 @@ export class RefinrClient {
 		return this.get('/api/v1/tracker', parseTracker);
 	}
 
-	private async get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
+	/**
+	 * `POST /api/v1/analyze-preview` with a document provided as text. Can take minutes (language model): when
+	 * `timeoutMs` expires, the plugin stops waiting but Refinr may still be analyzing.
+	 */
+	analyzePreview(document: { content: string; title: string }, timeoutMs: number): Promise<Result<Preview>> {
+		return this.send('POST', '/api/v1/analyze-preview', JSON.stringify(document), timeoutMs, parsePreview);
+	}
+
+	private get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
+		return this.send('GET', path, undefined, this.options.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS, parse);
+	}
+
+	private async send<T>(
+		method: HttpRequest['method'],
+		path: string,
+		body: string | undefined,
+		timeoutMs: number,
+		parse: (json: unknown) => T | null,
+	): Promise<Result<T>> {
 		const headers: Record<string, string> = { Accept: 'application/json' };
 		const key = this.options.apiKey();
 		if (key !== null && key !== '') {
 			headers['X-API-Key'] = key;
 		}
-		const timeoutMs = this.options.checkTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS;
+		const request: HttpRequest = { url: this.options.baseUrl + path, method, headers };
+		if (body !== undefined) {
+			request.body = body;
+		}
 		let status: number;
 		let text: string;
 		try {
-			const response = await withTimeout(
-				this.options.transport({ url: this.options.baseUrl + path, method: 'GET', headers }),
-				timeoutMs,
-			);
+			const response = await withTimeout(this.options.transport(request), timeoutMs);
 			status = response.status;
 			text = response.text;
 		} catch (e) {

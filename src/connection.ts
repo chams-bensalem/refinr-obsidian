@@ -124,7 +124,7 @@ function timeoutMessage(timeoutMs: number, operation: Operation): string {
 	const waited = seconds >= 120 ? `${Math.round(seconds / 60)} min` : `${seconds} s`;
 	switch (operation) {
 		case 'analysis':
-			return `No answer from Refinr after ${waited}. Refinr may still be analysing the note: wait before starting again, or raise the analysis timeout in the plugin settings.`;
+			return `No answer from Refinr after ${waited}. Refinr may still be analyzing the note: wait before starting again, or raise the analysis timeout in the plugin settings.`;
 		case 'creation':
 			return `No answer from Refinr after ${waited}. The issues may have been created anyway: check the tracker before trying again.`;
 		case 'check':
