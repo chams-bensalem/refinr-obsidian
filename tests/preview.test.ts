@@ -92,6 +92,19 @@ describe('parsePreview', () => {
 		expect(preview?.totals).toMatchObject({ aiReady: 0, needsValidation: 1, noVerdict: 2 });
 	});
 
+	it("Refinr's fallback verdict is shown as no verdict (unknown)", () => {
+		const preview = parsePreview({
+			epics: [
+				{
+					name: 'E',
+					stories: [{ title: 'A', aiReady: false, aiReadyReason: 'verdict indisponible (LlmException) : validation humaine necessaire' }],
+				},
+			],
+		});
+		expect(preview?.epics[0]?.stories[0]?.verdict).toBe('unknown');
+		expect(preview?.totals).toMatchObject({ needsValidation: 0, noVerdict: 1 });
+	});
+
 	it('accepts missing optional fields', () => {
 		const preview = parsePreview({ epics: [{ stories: [{}] }] });
 		expect(preview?.epics[0]).toMatchObject({ name: '', labels: [], stories: [{ title: '', tasks: [], storyPoints: null }] });

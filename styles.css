@@ -87,3 +87,31 @@
 	font-weight: var(--font-semibold);
 	margin-bottom: 0;
 }
+
+.refinr-preview .refinr-warning {
+	color: var(--text-warning);
+	white-space: pre-wrap;
+}
+
+.refinr-preview .refinr-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-3);
+}
+
+.refinr-preview .refinr-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-1);
+	margin: var(--size-4-2) 0;
+}
+
+.refinr-preview .refinr-precision {
+	width: 100%;
+	resize: vertical;
+}
+
+.refinr-preview .refinr-created li {
+	margin-bottom: var(--size-4-1);
+}

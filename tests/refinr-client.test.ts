@@ -233,6 +233,45 @@ describe('analyzePreview', () => {
 	});
 });
 
+describe('createIssues', () => {
+	const CREATION = { success: true, created: [{ type: 'epic', title: 'E', key: '#1', url: 'http://op/1' }], failed: [], epics: [{ name: 'E', jiraKey: '#1', stories: [] }] };
+	const EPICS = [{ name: 'E', stories: [], unknownField: 'kept' }];
+
+	it('posts the preview epics unchanged, with the project key encoded', async () => {
+		const transport = fakeTransport({ '/api/v1/create-jira?projectKey=my%20proj': json(200, CREATION) });
+		const result = await client(transport, KEY).createIssues(EPICS, 'my proj', 60_000);
+		expect(result.ok && result.value.created.length).toBe(1);
+		expect(transport.requests[0]).toMatchObject({ method: 'POST', body: JSON.stringify(EPICS), headers: { 'X-API-Key': KEY } });
+	});
+
+	it('omits projectKey for the default project', async () => {
+		const transport = fakeTransport({ '/api/v1/create-jira': json(200, CREATION) });
+		await expect(client(transport).createIssues(EPICS, '', 60_000)).resolves.toMatchObject({ ok: true });
+	});
+
+	it('reads the lists of a 207 and of a 502', async () => {
+		const partial = fakeTransport({ '/api/v1/create-jira': json(207, { ...CREATION, success: false, failed: [{ type: 'story', title: 'S', reason: 'r' }] }) });
+		await expect(client(partial).createIssues(EPICS, '', 1000)).resolves.toMatchObject({ ok: true, value: { failed: [{ reason: 'r' }] } });
+		const nothing = fakeTransport({ '/api/v1/create-jira': json(502, { success: false, error: 'No issue could be created', created: [], failed: [{ type: 'epic', title: 'E', reason: 'boom' }], epics: [] }) });
+		await expect(client(nothing).createIssues(EPICS, '', 1000)).resolves.toMatchObject({ ok: true, value: { created: [], failed: [{ reason: 'boom' }] } });
+	});
+
+	it('a 500 without lists and a 400 are errors', async () => {
+		const failure = fakeTransport({ '/api/v1/create-jira': json(500, { success: false, error: 'Failed to create the issues' }) });
+		await expect(client(failure).createIssues(EPICS, '', 1000)).resolves.toEqual({ ok: false, error: { kind: 'http', status: 500, detail: 'Failed to create the issues' } });
+		const invalid = fakeTransport({ '/api/v1/create-jira?projectKey=x': json(400, { success: false, error: 'Invalid projectKey: x' }) });
+		await expect(client(invalid).createIssues(EPICS, 'x', 1000)).resolves.toEqual({ ok: false, error: { kind: 'http', status: 400, detail: 'Invalid projectKey: x' } });
+	});
+
+	it('stops waiting after the timeout', async () => {
+		vi.useFakeTimers();
+		const never: HttpTransport = () => new Promise<HttpResponse>(() => undefined);
+		const pending = client(never).createIssues(EPICS, '', 5000);
+		await vi.advanceTimersByTimeAsync(5000);
+		await expect(pending).resolves.toEqual({ ok: false, error: { kind: 'timeout', timeoutMs: 5000 } });
+	});
+});
+
 describe('normalizeBaseUrl', () => {
 	it.each([
 		['http://localhost:8080', 'http://localhost:8080'],
