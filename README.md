@@ -131,13 +131,8 @@ refinr:
     - title: Export paid orders to CSV file
       key: "152"
       url: https://openproject.example.com/work_packages/152
-      verdict: validation-necessaire
-      verdictSource: fallback  # Refinr could not get a verdict (AI unavailable)
-    - title: Choose the CSV delimiter and encoding
-      key: "153"
-      url: https://openproject.example.com/work_packages/153
       verdict: ai-ready
-      reassessed: 2026-11-14T09:05:12+01:00
+      reassessed: 2026-11-13T23:50:05+01:00   # set by "Reassess a story"
   failed: []
   history:                 # earlier creations from this note, oldest first
     - created: 2026-11-13T22:01:30+01:00
@@ -156,13 +151,14 @@ refinr:
       failed: []
 ```
 
-Based on a block written during the real-world trial (OpenProject keys are numbers, written as text): host and project
-anonymized, titles translated, and the second story (`"153"`) added to show a reassessment.
+A block written during the real-world trial, after a second creation and a successful reassessment of story `"152"`
+(OpenProject keys are numbers, written as text): host and project anonymized, titles translated.
 
 - `status: partial`: some items were not created (listed in `failed`). `status: unknown`: the plugin could not know
   the outcome (timeout, connection lost after sending): **check the tracker before trying again**.
-- `verdictSource: fallback` on a story: Refinr could not get a verdict (e.g. AI provider unavailable) and applied
-  `validation-necessaire` by default.
+- `verdictSource: fallback` on a story (next to `verdict: validation-necessaire`): Refinr could not get a verdict
+  (e.g. AI provider unavailable) and applied `validation-necessaire` by default. A successful reassessment of the
+  story removes it.
 - A new creation moves the current entry to `history`; nothing is overwritten.
 - If the note was deleted or its frontmatter is invalid, nothing is written and the result can be copied as YAML.
 
