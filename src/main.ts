@@ -153,7 +153,10 @@ export default class RefinrPlugin extends Plugin {
 				void this.createIssues(file, modal, base, projectKey);
 			},
 			copy: (text) => {
-				void navigator.clipboard.writeText(text).then(() => new Notice('Refinr: YAML copied.'));
+				void (async () => {
+					await navigator.clipboard.writeText(text);
+					new Notice('Refinr: YAML copied.');
+				})();
 			},
 		});
 		modal.open();
