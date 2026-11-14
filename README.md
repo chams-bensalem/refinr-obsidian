@@ -18,6 +18,9 @@ validation can be reassessed from the note once you have added the missing preci
   tracker (Jira or OpenProject). Version 1.3.0 is required because the plugin sends notes as text (`content`), which
   older versions do not accept. The plugin does nothing without Refinr: all the analysis and all tracker calls are
   done by the server.
+- **Accounts**: the plugin itself needs no account, but the Refinr server needs an account on your tracker (Jira or
+  OpenProject) and, unless it uses a local model, an account with its AI provider. No payment is required by the
+  plugin.
 
 ## Network use
 
