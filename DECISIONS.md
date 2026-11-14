@@ -710,6 +710,67 @@ Sources : `obsidianmd/obsidian-developer-docs` commit `1c26772` (2026-10-21) —
   affiche « Refinr: open a Markdown note to analyze it. ».
 - Pas de CHANGELOG dans le dépôt : les notes de version sont générées à la release (`--generate-notes`).
 
+## Prêt pour le catalogue (revue du 2026-11-14)
+
+### Sources relues le 2026-11-14
+- `obsidianmd/obsidian-developer-docs` commit `1c26772` (2026-10-21) : *Developer policies*, *Submission requirements
+  for plugins*, *Plugin guidelines*, *Submit your plugin*, *Reference/Manifest*.
+- `obsidianmd/obsidian-releases` commit `153cf0a` (2026-11-13) : `README.md` (« How community plugins are pulled »),
+  `.github/workflows/mirror-community-json.yml`, `community-plugins.json` (10 354 plugins, `id` `refinr` et nom
+  « Refinr » libres).
+- **Changement de procédure constaté** : les modèles de PR (`.github/PULL_REQUEST_TEMPLATE/plugin.md`) et les actions
+  de validation ont été retirés le 2026-05-15 (commit `d4f0694`, « remove PR templates & validation actions ») ;
+  `community-plugins.json` est recopié **chaque heure** depuis `https://community.obsidian.md/assets/community-plugins.json`
+  par un bot. La soumission passe par **community.obsidian.md** (revue automatique), plus par une PR sur
+  `obsidian-releases` (cf. P0, « Soumission »). Les nouvelles entrées portent le suffixe « This plugin has not been
+  manually reviewed by Obsidian staff. », ajouté par le catalogue.
+
+### Règle → statut → preuve
+Statuts : ✅ conforme · 🔧 corrigé dans cette branche · ⛔ bloquant (décision du mainteneur) · ℹ️ remarque.
+
+| Règle (source) | Statut | Preuve |
+| --- | --- | --- |
+| `id` unique, minuscules, sans `obsidian`, ne finit pas par `plugin` (*Submit*, *Manifest*) | ✅ | `refinr`, absent de `community-plugins.json` (2026-11-14) |
+| `name` sans « Obsidian » ni « Plugin », pas de confusion avec un plugin officiel (*Policies*, marque) | ✅ | `Refinr` ; titre du README « Refinr for Obsidian » (usage descriptif) |
+| `author` / `authorUrl` | ✅ | `Chams Bensalem` / `https://github.com/chams-bensalem` |
+| Description ≤ 250 caractères, verbe d'action, point final, sans emoji, casse des noms propres (*Submission requirements*) | ✅ | 112 caractères, « Turn the active note… », finit par `.`, « Jira », « OpenProject » |
+| `fundingUrl` seulement pour des dons (*Submission requirements*) | ✅ | absent du manifest |
+| `minAppVersion` approprié (*Submission requirements*) | ✅ | `1.13.0`, contrôlé par `obsidianmd/no-unsupported-api` (lint vert) |
+| Node.js / Electron ⇒ `isDesktopOnly: true` (*Submission requirements*) | ✅ | aucune API Node/Electron dans `src/` (grep `fs`/`path`/`os`/`crypto`/`electron`/`require(` : rien) ; `isDesktopOnly: true` par décision du mainteneur (mobile non testé) |
+| `version` au format `x.y.z`, `versions.json` (*Manifest*, *Versions*) | ✅ | `0.1.0`, `{"0.1.0": "1.13.0"}`, `node version-bump.mjs check 0.1.0` vert |
+| Release GitHub au tag = version, avec `main.js`, `manifest.json`, `styles.css` (*Submit*) | ⛔ | aucune release ni tag à ce jour ; workflow `release.yml` prêt (brouillon à publier par le mainteneur) |
+| Code source accessible pour la revue (*Submit* : « we need access to the source code on GitHub ») | ⛔ | dépôt **privé** au 2026-11-14 ; l'attestation de provenance échoue aussi tant qu'il l'est |
+| `README.md` : but et utilisation (*Submit*) | ✅ | sections Usage, Settings, Limits |
+| Déclaration de l'usage du réseau (*Policies*, Disclosures) | ✅ | section *Network use* : seul le serveur Refinr configuré, requêtes par commande, ce qui part vers l'IA et le tracker |
+| Déclaration d'un compte requis (*Policies*, Disclosures) | 🔧 | ajout d'une ligne **Accounts** dans *Requirements* (le plugin n'en demande pas ; le serveur Refinr a besoin d'un compte tracker et, sauf modèle local, d'un compte chez le fournisseur IA) |
+| Paiement, publicité, accès hors du coffre, télémétrie serveur, code fermé (*Policies*) | ✅ | aucun ; « No telemetry, no other service, no request in the background » (README) |
+| Pas de télémétrie côté client (*Policies*) | ✅ | un seul accès réseau, `src/api/obsidian-transport.ts` (`requestUrl` vers l'URL réglée) |
+| Pas d'obfuscation (*Policies*) | ✅ | bundle esbuild minifié comme le gabarit, sources TypeScript dans le dépôt (public à faire, cf. ⛔) |
+| Pas d'auto-installation ni d'auto-mise à jour (*Policies*) | ✅ | aucune ; aucune dépendance d'exécution (`package.json` : devDependencies seulement) |
+| `LICENSE` et licence indiquée ; licences du code repris (*Policies*) | ✅ | `LICENSE` MIT, section *License* du README ; gabarit 0BSD (aucune attribution requise) |
+| Pas un fork (*Policies*) | ✅ | dépôt créé à partir du gabarit officiel, code propre |
+| `this.app`, jamais l'`app` global (*Guidelines*) | ✅ | grep `app.`/`window.app` hors `this.app` : rien |
+| Journalisation minimale (*Guidelines*) | ✅ | aucun `console.*` dans `src/` (règle `rule-custom-message` du lint) |
+| Noms du gabarit renommés, code du gabarit retiré (*Guidelines*, *Submission requirements*) | ✅ | lint `sample-names` / `no-sample-code` vert |
+| Pas d'`innerHTML` / `outerHTML` / `insertAdjacentHTML` (*Guidelines*) | ✅ | grep : rien ; test `tests/plain-text.test.ts` ; `no-unsanitized` du lint |
+| Nettoyage au déchargement (*Guidelines*) | ✅ | commandes, ruban, onglet de réglages par les méthodes du plugin ; écouteurs DOM sur des éléments de fenêtres (libérés avec elles) ; un seul minuteur, `clearTimeout` dans `finally` (`withTimeout`) ; aucun `registerEvent`/intervalle à libérer. ℹ️ une requête `requestUrl` en cours ne peut pas être annulée : elle se termine après une désactivation |
+| Pas de `detachLeavesOfType` dans `onunload` ; pas d'`activeLeaf` (*Guidelines*) | ✅ | aucune vue, aucun `onunload` ; grep `activeLeaf` : rien |
+| Pas de raccourci clavier par défaut ; bon type de callback (*Guidelines*) | ✅ | aucun `hotkeys` ; `checkCallback` pour les commandes conditionnelles |
+| ID et noms de commandes sans l'ID ni le nom du plugin (*Submission requirements*) | ✅ | `test-connection`, `analyze-note`, `reassess-story` ; règles `commands/*` du lint |
+| Réglages : pas de titre global, pas de « settings » dans les titres, `setHeading` (*Guidelines*) | ✅ | réglages déclaratifs, sections `Embeds` et `Advanced` seulement |
+| Casse de phrase (*Guidelines*) | ✅ ℹ️ | règle `ui/sentence-case` désactivée par défaut ; lancée une fois (`--rule`) : 5 alertes, toutes non retenues — 2 faux positifs `http://` → `HTTP://`, 2 noms propres (« Refinr », nom de commande « Test connection »), badge `no verdict` en minuscules comme les verdicts `ai-ready` / `validation-necessaire` |
+| `processFrontMatter` pour le frontmatter, pas de `Vault.modify` ni de l'Adapter API (*Guidelines*) | ✅ | grep `vault.modify` / `.adapter.` : rien ; frontmatter écrit par `processFrontMatter` |
+| Pas d'itération sur tous les fichiers ; `normalizePath` (*Guidelines*) | ✅ | grep `getFiles()` / `getMarkdownFiles()` : rien ; liens résolus par `metadataCache` |
+| Pas de style codé en dur (*Guidelines*) | ✅ | grep `.style.` / `cssText` : rien ; classes `refinr-*` et variables d'Obsidian dans `styles.css` |
+| `async`/`await` plutôt que `Promise` (*Guidelines*) | 🔧 | dernière chaîne `.then()` (copie du YAML dans l'aperçu) réécrite en `async`/`await`, comportement inchangé |
+| Expressions régulières sans *lookbehind* (*Guidelines* › Mobile) | ✅ | règle `regex-lookbehind` du lint (erreur) verte |
+
+### À faire par le mainteneur avant la soumission
+1. Rendre le dépôt **public** (code accessible à la revue, attestations de provenance).
+2. Publier la release `0.1.0` (workflow `release.yml`, brouillon relu puis publié).
+3. Soumettre sur **community.obsidian.md** (compte Obsidian, GitHub lié, ajout du plugin), puis traiter la revue
+   automatique.
+
 ## Dépendances
 
 ### Alerte Dependabot n°1 : minimatch (2026-11-14)
