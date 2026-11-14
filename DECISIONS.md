@@ -184,8 +184,7 @@ prouvé qu'en exécutant Obsidian. Ces points sont repris dans la liste de l'ess
    *Code en bloc et en ligne, bloc `^id` d'élément de liste : observés en P2 (cf. « Essai réel P2 »).*
 6. Rendu de la fenêtre d'aperçu sur mobile et en thème clair/sombre. *Desktop : observé en P2.*
 7. Délai dépassé côté plugin : notice correcte, aucune relance de `create-jira`.
-8. Bouton du ruban (ajouté avant la 0.1.0) : icône `wand-sparkles` affichée, infobulle « Refinr: Analyze note », clic
-   = même analyse que la commande, notice sans note Markdown active, icône retirée quand le plugin est désactivé.
+- *Bouton du ruban : confirmé par l'essai complet P4 (cf. « Essai réel complet P4 »), retiré de la liste.*
 
 ## Phase P1 — Squelette, réglages, connexion
 
@@ -670,6 +669,21 @@ commit `07ceb81` (2026-08-02) — README « Releasing new releases », `.github/
 - Pour recommencer : `gh release delete <x.y.z> --cleanup-tag --yes` (brouillon et tag distant ; sans brouillon,
   `git push origin :refs/tags/<x.y.z>`), `git tag -d <x.y.z>`, correction, puis nouveau tag sur `main`.
 
+### Essai réel complet P4 (2026-11-14, Refinr local sur l'OpenProject local, modèle Gemini 3.8) — réussi
+Coffre de test, note `P3/Customer data export (open points)`. Résultats relevés par le mainteneur :
+- **Bouton du ruban** : clic sans note Markdown active → notice ; clic avec la note ouverte → même analyse que la
+  commande.
+- **Aperçu** : 1 epic ; story #156 en `validation-necessaire`.
+- **Création** : #155 (epic) et #156 (story) créés ; frontmatter `refinr` correct, **sans** `verdictSource` (verdict
+  réel, pas de repli).
+- **Réévaluation** : bouton « Reassess » grisé tant que la précision est vide ; réévaluation → `ai-ready`, puis
+  `verdict` et `reassessed` écrits dans le frontmatter.
+- **Désactivation du plugin** : icône retirée du ruban → point 8 de la liste « À confirmer à l'exécution (essai réel
+  P4) » confirmé et retiré de la liste.
+- Restent à confirmer (liste ci-dessus, points 1 à 7) : mobile, Obsidian Sync, changement et suppression de secret,
+  préservation de la mise en page par `processFrontMatter` et YAML invalide, fraîcheur du cache, thème clair/sombre,
+  délai dépassé.
+
 ## Avant la 0.1.0 — Bouton du ruban (2026-11-14)
 
 ### Faits vérifiés
@@ -688,7 +702,8 @@ Sources : `obsidianmd/obsidian-developer-docs` commit `1c26772` (2026-10-21) —
   méthodes du plugin qui libèrent d'elles-mêmes (`registerEvent`, `addCommand`…). `addRibbonIcon` est une méthode de
   `Plugin` : le gabarit et l'exemple de la doc l'appellent dans `onload` sans rien faire dans `onunload`. → appel dans
   `onload` uniquement, élément renvoyé non conservé, rien dans `onunload`. Le retrait effectif de l'icône à la
-  désactivation du plugin n'est **pas écrit noir sur blanc** dans la doc : **à confirmer à l'exécution** (essai réel).
+  désactivation du plugin n'est **pas écrit noir sur blanc** dans la doc : **confirmé à l'exécution** (essai réel
+  complet P4, 2026-11-14).
 - **Nommage et casse** : l'infobulle suit la casse de phrase des guidelines. La règle
   `obsidianmd/ui/sentence-case` couvre bien `addRibbonIcon` (2ᵉ argument), mais elle est **désactivée dans la
   configuration recommandée** depuis la 0.3.0 (« reports too much ordinary text ») : notre `npm run lint` ne la
