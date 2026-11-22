@@ -71,6 +71,9 @@ updates.
 2. Copy them into `<your vault>/.obsidian/plugins/refinr/` (create the folder).
 3. Restart Obsidian (or reload the plugins), then enable **Refinr** in **Settings → Community plugins**.
 
+To update a manual install, replace the three files, then turn **Refinr** off and on again in
+**Settings → Community plugins**: a forced reload of Obsidian is not enough to load the new version.
+
 Alternatively, build the plugin from the sources (Node.js 22.12 or later):
 
 ```sh
