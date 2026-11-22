@@ -826,3 +826,18 @@ Statuts : ✅ conforme · 🔧 corrigé dans cette branche · ⛔ bloquant (déc
   régénérer le lockfile (`npm install`, puis `npm ls minimatch`). Dependabot le signalera (mise à jour de ces paquets,
   ou alerte rouverte si l'override est retiré trop tôt). Si un lint se met à se comporter bizarrement entre-temps,
   soupçonner d'abord cet override (ESLint 9 tourne avec une minimatch plus récente que celle qu'il déclare).
+
+## Essai réel de la 0.2.0 (2026-11-22)
+
+- **Conditions** : plugin `p5-plugin-0.2.0` dans le coffre de test, Refinr `release-1.4.0` en local (analyse et
+  verdict par Haiku 5.5), OpenProject local ; essai mené par le mainteneur.
+- **Conforme** : langue forcée (`lang` du frontmatter, réglage par défaut) et détectée ; `400` sur un `language`
+  invalide affiché tel quel ; création depuis l'aperçu, frontmatter et date (`localTimestamp`) ; réévaluation partielle
+  avec la question suivante dans la nouvelle raison ; validation humaine, puis `409` sur une seconde validation ;
+  notification « Open preview ».
+- **Non testé à la main** (couvert par les tests) : `503` réel du fournisseur, verdict de repli (`aiReadySource:
+  fallback`).
+- **Correction** : README, installation manuelle : après remplacement des fichiers, désactiver puis réactiver Refinr
+  dans *Settings → Community plugins* (le rechargement forcé d'Obsidian ne charge pas la nouvelle version).
+- **Suite** (0.3.0) : afficher la question à laquelle répondre dans la fenêtre de réévaluation, en gardant
+  `aiReadyReason` dans le frontmatter.
