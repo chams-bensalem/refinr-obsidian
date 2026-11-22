@@ -295,6 +295,44 @@ describe('createIssues', () => {
 	});
 });
 
+describe('503 of Refinr 1.4.0 (AI provider quota or overload)', () => {
+	it.each<[string, string, string]>([
+		['rate-limited', 'The AI provider quota or rate limit was reached', 'rate-limited'],
+		['overloaded', 'The AI provider is temporarily overloaded', 'overloaded'],
+	])('%s, with the delay of retryAfterSeconds', async (_, message, kind) => {
+		const transport = fakeTransport({
+			'/api/v1/analyze-preview': json(503, { success: false, error: message, correlationId: 'c1', retryAfterSeconds: 42 }),
+		});
+		await expect(client(transport).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toEqual({
+			ok: false,
+			error: { kind, status: 503, detail: message, correlationId: 'c1', retryAfterSeconds: 42 },
+		});
+	});
+
+	it('without retryAfterSeconds (or with an unusable one), no delay', async () => {
+		const transport = fakeTransport({
+			'/api/v1/reassess-story': json(503, { success: false, error: 'The AI provider is temporarily overloaded', retryAfterSeconds: 'soon' }),
+		});
+		await expect(client(transport).reassessStory('#1', 'p', 1000)).resolves.toEqual({
+			ok: false,
+			error: { kind: 'overloaded', status: 503, detail: 'The AI provider is temporarily overloaded' },
+		});
+	});
+
+	it('another 503 and the 502 of Refinr 1.3 stay plain HTTP errors', async () => {
+		const other = fakeTransport({ '/api/v1/analyze-preview': json(503, { success: false, error: 'Service Unavailable' }) });
+		await expect(client(other).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toMatchObject({
+			ok: false,
+			error: { kind: 'http', status: 503 },
+		});
+		const old = fakeTransport({ '/api/v1/analyze-preview': json(502, { success: false, error: 'The AI provider is unavailable' }) });
+		await expect(client(old).analyzePreview({ content: 'x', title: 't' }, 1000)).resolves.toMatchObject({
+			ok: false,
+			error: { kind: 'http', status: 502 },
+		});
+	});
+});
+
 describe('reassessStory', () => {
 	it('posts the key and the precision, reads the new verdict', async () => {
 		const transport = fakeTransport({ '/api/v1/reassess-story': json(200, { success: true, issueKey: '#15', aiReady: true, aiReadyReason: 'Now clear' }) });

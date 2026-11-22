@@ -116,7 +116,25 @@ export function describeError(
 			return `Unexpected answer from ${baseUrl} (HTTP ${error.status ?? '?'}): is this the URL of a Refinr server?`;
 		case 'http':
 			return `Refinr answered HTTP ${error.status ?? '?'}${error.detail === undefined ? '' : `: ${error.detail}`}.${ref}`;
+		case 'rate-limited':
+			return `The AI provider of Refinr has reached its quota or rate limit (HTTP 503). ${retryAdvice(error.retryAfterSeconds)}${ref}`;
+		case 'overloaded':
+			return `The AI provider of Refinr is temporarily overloaded (HTTP 503). ${retryAdvice(error.retryAfterSeconds)}${ref}`;
 	}
+}
+
+/** "Try again in …" with the delay announced by Refinr, or a plain advice without one. */
+function retryAdvice(seconds: number | undefined): string {
+	if (seconds === undefined) {
+		return 'Try again later.';
+	}
+	if (seconds < 120) {
+		return `Try again in ${seconds} s.`;
+	}
+	if (seconds < 7200) {
+		return `Try again in ${Math.ceil(seconds / 60)} min.`;
+	}
+	return `Try again in ${Math.ceil(seconds / 3600)} h.`;
 }
 
 function timeoutMessage(timeoutMs: number, operation: Operation): string {

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
-import { fallbackCause } from './verdict';
+import { isFallback } from './verdict';
 
 /**
  * Backlog preview returned by `POST /api/v1/analyze-preview` (contract: Refinr's
@@ -122,17 +122,17 @@ function parseStory(raw: unknown): StoryView | null {
 		storyPoints: count(raw.estimatedStoryPoints),
 		priority: text(raw.priority),
 		labels: strings(raw.labels),
-		verdict: verdictOf(raw.aiReady, text(raw.aiReadyReason)),
+		verdict: verdictOf(raw.aiReady, text(raw.aiReadyReason), raw.aiReadySource),
 		verdictReason: text(raw.aiReadyReason),
 		tasks,
 	};
 }
 
-function verdictOf(aiReady: unknown, reason: string): Verdict {
+function verdictOf(aiReady: unknown, reason: string, source: unknown): Verdict {
 	if (aiReady === true) {
 		return 'ai-ready';
 	}
-	return aiReady === false && fallbackCause(reason) === null ? 'validation-necessaire' : 'unknown';
+	return aiReady === false && !isFallback(aiReady, reason, source) ? 'validation-necessaire' : 'unknown';
 }
 
 function parseTask(raw: unknown): TaskView | null {

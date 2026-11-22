@@ -13,7 +13,11 @@ export type RefinrErrorKind =
 	| 'cors'
 	| 'too-large'
 	| 'http'
-	| 'invalid-response';
+	| 'invalid-response'
+	/** 503 from Refinr 1.4.0 or later: quota or rate limit of its AI provider. */
+	| 'rate-limited'
+	/** 503 from Refinr 1.4.0 or later: its AI provider is temporarily overloaded. */
+	| 'overloaded';
 
 export interface RefinrError {
 	kind: RefinrErrorKind;
@@ -25,6 +29,8 @@ export interface RefinrError {
 	correlationId?: string;
 	/** Timeout that expired, for `timeout`. */
 	timeoutMs?: number;
+	/** Delay announced by Refinr before trying again (`retryAfterSeconds`), for `rate-limited` and `overloaded`. */
+	retryAfterSeconds?: number;
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: RefinrError };
@@ -71,6 +77,9 @@ export interface RefinrClientOptions {
 export const DEFAULT_CHECK_TIMEOUT_MS = 30_000;
 const CORS_REJECTION = 'Invalid CORS request';
 const HOST_REJECTION = 'Host not allowed';
+/** Messages of Refinr's 503 (`BacklogController`): matched in full, an other 503 stays a plain HTTP error. */
+const RATE_LIMITED = 'The AI provider quota or rate limit was reached';
+const OVERLOADED = 'The AI provider is temporarily overloaded';
 const MAX_DETAIL_LENGTH = 300;
 
 /** `http(s)://host[:port][/path]` without trailing slash, or null when the URL is unusable. */
@@ -210,6 +219,11 @@ export function classifyError(status: number, text: string, apiKey: string | nul
 	}
 	if (status === 413) {
 		return { kind: 'too-large', ...base };
+	}
+	if (status === 503 && (apiError === RATE_LIMITED || apiError === OVERLOADED)) {
+		const delay = isRecord(body) ? body.retryAfterSeconds : undefined;
+		const retry = typeof delay === 'number' && Number.isInteger(delay) && delay > 0 ? { retryAfterSeconds: delay } : {};
+		return { kind: apiError === RATE_LIMITED ? 'rate-limited' : 'overloaded', ...base, ...retry };
 	}
 	return { kind: 'http', ...base };
 }

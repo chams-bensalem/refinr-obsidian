@@ -104,6 +104,27 @@ describe('parseCreation', () => {
 		]);
 	});
 
+	it('Refinr 1.4.0: the fallback is read from aiReadySource', () => {
+		const answer = {
+			created: [],
+			failed: [],
+			epics: [
+				{
+					name: 'E',
+					jiraKey: null,
+					stories: [
+						{ title: 'S', jiraKey: '#160', aiReady: false, aiReadyReason: 'any wording', aiReadySource: 'fallback' },
+						{ title: 'T', jiraKey: '#161', aiReady: false, aiReadyReason: 'Format not decided', aiReadySource: 'model' },
+					],
+				},
+			],
+		};
+		expect(parseCreation(answer)?.stories.map((story) => [story.key, story.fallback])).toEqual([
+			['#160', true],
+			['#161', false],
+		]);
+	});
+
 	it('keeps only http(s) URLs', () => {
 		const odd = { created: [{ type: 'story', title: 'S', key: 'K', url: 'javascript:alert(1)' }], failed: [], epics: [] };
 		expect(parseCreation(odd)?.created[0]?.url).toBeNull();
