@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
-import { moment, Notice, Plugin, stringifyYaml, type TFile } from 'obsidian';
+import { Notice, Plugin, stringifyYaml, type TFile } from 'obsidian';
 import { alreadyAnalyzingMessage, analyzeTarget, isMarkdownNote } from './analyze-target';
 import { obsidianTransport } from './api/obsidian-transport';
 import { normalizeBaseUrl, RefinrClient } from './api/refinr-client';
@@ -34,6 +34,7 @@ import { type DoneState, type FrontmatterOutcome, PreviewModal } from './preview
 import { type PendingStory, ReassessModal, StoryPicker, ValidateModal } from './reassess-modal';
 import { normalizeSettings, type RefinrSettings } from './settings';
 import { RefinrSettingTab } from './settings-tab';
+import { localTimestamp } from './timestamp';
 
 /** What is writing a note's `refinr` property: creation, reassessment and validation are exclusive on a note. */
 type NoteTask = 'create' | 'reassess' | 'validate';
@@ -260,7 +261,7 @@ export default class RefinrPlugin extends Plugin {
 		}
 		this.busy.set(file.path, 'create');
 		try {
-			const meta: RecordMeta = { date: moment().format(), tracker, project: projectKey === '' ? null : projectKey };
+			const meta: RecordMeta = { date: localTimestamp(), tracker, project: projectKey === '' ? null : projectKey };
 			const result = await this.client(baseUrl).createIssues(base.preview.raw, projectKey, this.timeoutMs, language);
 			if (result.ok) {
 				const record = recordFromCreation(result.value, meta);
@@ -363,7 +364,7 @@ export default class RefinrPlugin extends Plugin {
 				let frontmatterOk = false;
 				try {
 					await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-						found = applyReassessment(fm, story.key, verdict, moment().format());
+						found = applyReassessment(fm, story.key, verdict, localTimestamp());
 					});
 					frontmatterOk = found;
 					frontmatter = found
@@ -428,7 +429,7 @@ export default class RefinrPlugin extends Plugin {
 				let frontmatter: string;
 				try {
 					await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
-						found = applyValidation(fm, story.key, moment().format());
+						found = applyValidation(fm, story.key, localTimestamp());
 					});
 					frontmatter = found
 						? `Verdict of ${story.key} updated in the "refinr" property of ${file.path}.`
