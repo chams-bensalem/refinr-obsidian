@@ -7,7 +7,7 @@ release needs is given below.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-11-23
+## [0.2.0] - 2026-11-22
 
 Needs **Refinr 1.3.0** or later; the new features need **Refinr 1.4.0** (with Refinr 1.3 the plugin works as 0.1.0).
 
