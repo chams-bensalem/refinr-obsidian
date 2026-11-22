@@ -7,6 +7,7 @@ import { normalizeBaseUrl, RefinrClient } from './api/refinr-client';
 import {
 	applyReassessment,
 	applyRecord,
+	applyValidation,
 	pendingStories,
 	type RecordMeta,
 	recordFromCreation,
@@ -22,6 +23,7 @@ import {
 	reassessmentError,
 	type SecretState,
 	unknownCreationMessage,
+	validationError,
 } from './connection';
 import { nothingCreated } from './creation';
 import { providedTextLength } from './document';
@@ -29,12 +31,17 @@ import { expandNote } from './embeds';
 import { outputLanguage } from './language';
 import { VaultNotes } from './obsidian/vault-notes';
 import { type DoneState, type FrontmatterOutcome, PreviewModal } from './preview-modal';
-import { type PendingStory, ReassessModal, StoryPicker } from './reassess-modal';
+import { type PendingStory, ReassessModal, StoryPicker, ValidateModal } from './reassess-modal';
 import { normalizeSettings, type RefinrSettings } from './settings';
 import { RefinrSettingTab } from './settings-tab';
 
-/** What is writing a note's `refinr` property: creation and reassessment are exclusive on a note. */
-type NoteTask = 'create' | 'reassess';
+/** What is writing a note's `refinr` property: creation, reassessment and validation are exclusive on a note. */
+type NoteTask = 'create' | 'reassess' | 'validate';
+
+/** A validation makes no model call: Refinr only writes the tracker (OpenProject: comment, read, update). */
+const VALIDATION_TIMEOUT_MS = 120_000;
+
+const TASK_NAMES: Record<NoteTask, string> = { create: 'creation', reassess: 'reassessment', validate: 'validation' };
 
 export default class RefinrPlugin extends Plugin {
 	settings: RefinrSettings = normalizeSettings(undefined);
@@ -73,21 +80,29 @@ export default class RefinrPlugin extends Plugin {
 		this.addCommand({
 			id: 'reassess-story',
 			name: 'Reassess a story',
-			checkCallback: (checking) => {
-				const file = this.app.workspace.getActiveFile();
-				if (file === null || file.extension !== 'md' || this.busy.has(file.path)) {
-					return false;
-				}
-				const stories = pendingStories(this.frontmatter(file));
-				if (stories.length === 0) {
-					return false;
-				}
-				if (!checking) {
-					new StoryPicker(this.app, stories, (story) => this.openReassessment(file, story)).open();
-				}
-				return true;
-			},
+			checkCallback: (checking) => this.storyCommand(checking, (file, story) => this.openReassessment(file, story)),
 		});
+		this.addCommand({
+			id: 'validate-story',
+			name: 'Validate a story',
+			checkCallback: (checking) => this.storyCommand(checking, (file, story) => this.openValidation(file, story)),
+		});
+	}
+
+	/** Command of a story picker on the active note's stories awaiting validation (hidden when there is none). */
+	private storyCommand(checking: boolean, open: (file: TFile, story: PendingStory) => void): boolean {
+		const file = this.app.workspace.getActiveFile();
+		if (file === null || file.extension !== 'md' || this.busy.has(file.path)) {
+			return false;
+		}
+		const stories = pendingStories(this.frontmatter(file));
+		if (stories.length === 0) {
+			return false;
+		}
+		if (!checking) {
+			new StoryPicker(this.app, stories, (story) => open(file, story)).open();
+		}
+		return true;
 	}
 
 	async loadSettings(): Promise<void> {
@@ -237,7 +252,7 @@ export default class RefinrPlugin extends Plugin {
 				message:
 					baseUrl === null
 						? 'Set an http:// or https:// URL in the plugin settings. Nothing was sent.'
-						: `A ${running === 'reassess' ? 'reassessment' : 'creation'} is running on this note: try again when it ends. Nothing was sent.`,
+						: `A ${TASK_NAMES[running ?? 'create']} is running on this note: try again when it ends. Nothing was sent.`,
 				unknown: false,
 				frontmatter: null,
 			});
@@ -317,7 +332,7 @@ export default class RefinrPlugin extends Plugin {
 				message:
 					baseUrl === null
 						? 'Set an http:// or https:// URL in the plugin settings.'
-						: `A ${running === 'create' ? 'creation' : 'reassessment'} is running on this note: try again when it ends.`,
+						: `A ${TASK_NAMES[running ?? 'reassess']} is running on this note: try again when it ends.`,
 			});
 			return;
 		}
@@ -363,6 +378,73 @@ export default class RefinrPlugin extends Plugin {
 			}
 			if (!modal.isShown) {
 				this.notify(`Refinr: the reassessment of ${story.key} has ended.`, 'Show result', () => modal.open());
+			}
+		} finally {
+			this.busy.delete(file.path);
+		}
+	}
+
+	private openValidation(file: TFile, story: PendingStory): void {
+		const tracker = recordTracker(this.frontmatter(file)) ?? 'the tracker';
+		const modal: ValidateModal = new ValidateModal(this.app, story, tracker, () => {
+			void this.validate(file, story, modal);
+		});
+		modal.open();
+	}
+
+	/** `validate-story` (Refinr 1.4.0), then the story's verdict in the note's `refinr` property (`verdictSource: human`). */
+	private async validate(file: TFile, story: PendingStory, modal: ValidateModal): Promise<void> {
+		const baseUrl = normalizeBaseUrl(this.settings.refinrUrl);
+		const running = this.busy.get(file.path);
+		if (baseUrl === null || running !== undefined) {
+			modal.setState({
+				kind: 'error',
+				message:
+					baseUrl === null
+						? 'Set an http:// or https:// URL in the plugin settings.'
+						: `A ${TASK_NAMES[running ?? 'validate']} is running on this note: try again when it ends.`,
+			});
+			return;
+		}
+		this.busy.set(file.path, 'validate');
+		try {
+			const client = this.client(baseUrl);
+			const noteTracker = recordTracker(this.frontmatter(file));
+			const current = await client.tracker();
+			if (!current.ok) {
+				modal.setState({ kind: 'error', message: describeError(current.error, baseUrl, 'check', this.secretState()) });
+				return;
+			}
+			if (noteTracker !== null && noteTracker !== current.value.name) {
+				modal.setState({
+					kind: 'error',
+					message: `The backlog of this note was created in ${noteTracker}, but Refinr now uses ${current.value.name}. Nothing was sent.`,
+				});
+				return;
+			}
+			const result = await client.validateStory(story.key, VALIDATION_TIMEOUT_MS);
+			if (result.ok) {
+				let found = false;
+				let frontmatter: string;
+				try {
+					await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+						found = applyValidation(fm, story.key, moment().format());
+					});
+					frontmatter = found
+						? `Verdict of ${story.key} updated in the "refinr" property of ${file.path}.`
+						: `${story.key} is no longer in the "refinr" property of ${file.path}: the note was not updated.`;
+				} catch (e) {
+					frontmatter = `Could not update the "refinr" property of ${file.path} (${errorText(e)}): set the verdict of ${story.key} to ai-ready by hand.`;
+				}
+				modal.setState({ kind: 'done', frontmatter, frontmatterOk: found });
+			} else {
+				modal.setState({
+					kind: 'error',
+					message: validationError(result.error, story.key, current.value.name, baseUrl, this.secretState()),
+				});
+			}
+			if (!modal.isShown) {
+				this.notify(`Refinr: the validation of ${story.key} has ended.`, 'Show result', () => modal.open());
 			}
 		} finally {
 			this.busy.delete(file.path);

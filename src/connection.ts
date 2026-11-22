@@ -20,7 +20,7 @@ export interface ConnectionReport {
 }
 
 /** What the plugin was doing when an error happened; the advice differs (an analysis may still be running). */
-export type Operation = 'check' | 'analysis' | 'creation' | 'reassessment';
+export type Operation = 'check' | 'analysis' | 'creation' | 'reassessment' | 'validation';
 
 /** `GET /health`, then `/source` and `/tracker` (they need the API key, `/health` does not). */
 export async function checkConnection(client: RefinrClient, secret: SecretState): Promise<ConnectionCheck> {
@@ -147,6 +147,8 @@ function timeoutMessage(timeoutMs: number, operation: Operation): string {
 			return `No answer from Refinr after ${waited}. The issues may have been created anyway: check the tracker before trying again.`;
 		case 'reassessment':
 			return `No answer from Refinr after ${waited}. Refinr may still be reassessing the story: check the issue before trying again (a new attempt adds another comment).`;
+		case 'validation':
+			return `No answer from Refinr after ${waited}. The story may have been validated anyway: check the issue before trying again.`;
 		case 'check':
 			return `No answer from Refinr after ${waited}.`;
 	}
@@ -166,6 +168,24 @@ export function unknownCreationMessage(error: RefinrError, baseUrl: string): str
 			? `The connection to Refinr was lost after the request was sent${error.detail === undefined ? '' : ` (${error.detail})`}.`
 			: describeError(error, baseUrl, 'check');
 	return `${cause} The issues may have been created anyway: check the tracker before trying again.`;
+}
+
+/** Messages of a failed human validation (`validate-story`, Refinr 1.4.0 or later). */
+export function validationError(error: RefinrError, key: string, tracker: string, baseUrl: string, secret: SecretState): string {
+	const ref = error.correlationId === undefined ? '' : ` (correlation id ${error.correlationId})`;
+	if (error.kind === 'http' && error.status === 409) {
+		return `${key} is no longer awaiting validation in ${tracker}; the note was not updated.`;
+	}
+	if (error.kind === 'http' && (error.status === 404 || error.status === 405)) {
+		return `This Refinr server cannot validate a story (HTTP ${error.status}): it needs Refinr 1.4.0 or later.${ref}`;
+	}
+	if (error.kind === 'http' && error.status === 500) {
+		return (
+			`Refinr could not validate ${key} (issue missing in ${tracker}, or ${tracker} unavailable)` +
+			`${error.detail === undefined ? '' : `: ${error.detail}`}.${ref} Check the issue before trying again.`
+		);
+	}
+	return describeError(error, baseUrl, 'validation', secret);
 }
 
 /** Messages of a failed reassessment; Refinr has no 404 (an unknown key is a 500). */

@@ -10,6 +10,7 @@ import {
 	describeError,
 	reassessmentError,
 	unknownCreationMessage,
+	validationError,
 } from '../src/connection';
 
 const BASE = 'http://localhost:8080';
@@ -213,6 +214,34 @@ describe('reassessmentError', () => {
 		expect(reassessmentError({ kind: 'network', detail: 'net::ERR_CONNECTION_REFUSED' }, '#15', 'OpenProject', BASE, none)).toContain('Could not reach Refinr');
 		expect(reassessmentError({ kind: 'http', status: 502, detail: 'The AI provider is unavailable' }, '#15', 'OpenProject', BASE, none)).toBe(
 			'Refinr answered HTTP 502: The AI provider is unavailable.',
+		);
+	});
+});
+
+describe('validationError', () => {
+	const none = { kind: 'none' } as const;
+
+	it('409: no longer awaiting validation', () => {
+		expect(validationError({ kind: 'http', status: 409 }, '#15', 'Jira', BASE, none)).toBe(
+			'#15 is no longer awaiting validation in Jira; the note was not updated.',
+		);
+	});
+
+	it.each([404, 405])('%i: Refinr older than 1.4.0', (status) => {
+		expect(validationError({ kind: 'http', status }, '#15', 'Jira', BASE, none)).toBe(
+			`This Refinr server cannot validate a story (HTTP ${status}): it needs Refinr 1.4.0 or later.`,
+		);
+	});
+
+	it('500: issue missing or tracker unavailable', () => {
+		expect(validationError({ kind: 'http', status: 500, detail: 'Failed to validate the story', correlationId: 'c3' }, '#15', 'Jira', BASE, none)).toBe(
+			'Refinr could not validate #15 (issue missing in Jira, or Jira unavailable): Failed to validate the story. (correlation id c3) Check the issue before trying again.',
+		);
+	});
+
+	it('timeout: the story may have been validated', () => {
+		expect(validationError({ kind: 'timeout', timeoutMs: 120_000 }, '#15', 'Jira', BASE, none)).toBe(
+			'No answer from Refinr after 2 min. The story may have been validated anyway: check the issue before trying again.',
 		);
 	});
 });
