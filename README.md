@@ -6,18 +6,20 @@ Turn the active note into an agent-ready backlog (Epics, Stories, Sub-tasks) in 
 The plugin sends the note to your Refinr server, shows the backlog Refinr proposes, creates the issues in the tracker
 configured on that server, and records what was created in the note's frontmatter. Each story gets a readiness verdict:
 `ai-ready` (clear enough for a coding agent) or `validation-necessaire` (needs a human decision first). A story awaiting
-validation can be reassessed from the note once you have added the missing precision.
+validation can be reassessed from the note once you have added the missing precision, or validated by you directly.
 
-> Status: 0.1.0, not yet in the Obsidian community directory. Desktop only for now (Windows, macOS, Linux): mobile has
-> not been tested yet.
+> Status: 0.2.0, in the [Obsidian community catalog](https://community.obsidian.md/plugins/refinr). Desktop only for
+> now (Windows, macOS, Linux): mobile has not been tested yet.
 
 ## Requirements
 
 - Obsidian **1.13.0** or later.
 - A running **Refinr 1.3.0 or later** server that you control (self-hosted), configured with its AI provider and its
   tracker (Jira or OpenProject). Version 1.3.0 is required because the plugin sends notes as text (`content`), which
-  older versions do not accept. The plugin does nothing without Refinr: all the analysis and all tracker calls are
-  done by the server.
+  older versions do not accept. **Refinr 1.4.0** is needed for the features of 0.2.0: the output language, the verdict
+  source (`aiReadySource`), **Validate a story** and the messages for an AI provider quota or overload (`503`); with
+  Refinr 1.3 the plugin works as 0.1.0 did. The plugin does nothing without Refinr: all the analysis and all tracker
+  calls are done by the server.
 - **Accounts**: the plugin itself needs no account, but the Refinr server needs an account on your tracker (Jira or
   OpenProject) and, unless it uses a local model, an account with its AI provider. No payment is required by the
   plugin.
@@ -29,23 +31,40 @@ The plugin sends requests **only to the Refinr server whose URL you set**, and o
 | Command | Requests | What is sent |
 | --- | --- | --- |
 | Test connection | `GET /api/v1/health`, `/source`, `/tracker` | nothing from your vault |
-| Analyze note | `GET /source`, `/tracker`, `POST /api/v1/analyze-preview` | the note's text (frontmatter removed, embeds expanded) and its name |
-| Create in {tracker} | `POST /api/v1/create-jira` | the backlog shown in the preview |
-| Reassess a story | `GET /tracker`, `POST /api/v1/reassess-story` | the issue key and the precision you typed |
+| Analyze note | `GET /source`, `/tracker`, `POST /api/v1/analyze-preview` | the note's text (frontmatter removed, embeds expanded), its name and the output language, if any |
+| Create in {tracker} | `POST /api/v1/create-jira` | the backlog shown in the preview, and the output language, if any |
+| Reassess a story | `GET /tracker`, `POST /api/v1/reassess-story` | the issue key, the precision you typed and the output language, if any |
+| Validate a story | `GET /tracker`, `POST /api/v1/validate-story` | the issue key |
 
 What happens next, on the Refinr server:
 
 - **Your note goes to an AI provider.** The text of the note, embeds included, is sent by Refinr to the AI provider
   configured on the server: a cloud service (e.g. Anthropic, Google, OpenAI-compatible) or a local model, depending on
   how the server is set up. Check that configuration before analyzing notes with sensitive content.
-- **Creation and reassessment write to your tracker.** *Create in {tracker}* creates issues; *Reassess a story* adds
-  your precision to the issue and changes its verdict.
+- **Creation, reassessment and validation write to your tracker.** *Create in {tracker}* creates issues; *Reassess a
+  story* adds your precision to the issue and changes its verdict; *Validate a story* marks the issue `ai-ready`
+  (no AI call).
 - **The API key is sent with every request** in the `X-API-Key` header, when you have set one. Prefer `https://` when
   Refinr is not on your own machine.
 
 No telemetry, no other service, no request in the background.
 
-## Installation (manual)
+## Clipboard
+
+The plugin only **writes** to the clipboard, and only when you click **Copy YAML** (in the preview, or when the result
+could not be written in the note): it copies the YAML of the backlog or of the `refinr` property. It never reads the
+clipboard.
+
+## Installation
+
+### From the community catalog (recommended)
+
+In Obsidian, open **Settings → Community plugins**, turn on community plugins if needed, choose **Browse**, search for
+**Refinr**, then **Install** and **Enable**. The catalog page:
+[community.obsidian.md/plugins/refinr](https://community.obsidian.md/plugins/refinr). Obsidian then offers the
+updates.
+
+### Manual
 
 1. Download `main.js`, `manifest.json` and `styles.css` from the
    [latest release](https://github.com/chams-bensalem/refinr-obsidian/releases/latest).
@@ -70,6 +89,7 @@ then copy the same three files from the repository root.
 | Default project key | *(empty)* | Project used when creating issues (editable before each creation). Empty = Refinr's default project. |
 | Maximum embed depth | `3` | Levels of `![[embeds]]` expanded before sending a note (0 = embeds sent as written). |
 | Maximum embedded characters | `100000` | Characters added by expanded embeds, all levels together. |
+| Default language | *(empty)* | Language of the backlog and of the verdict reasons, as a two-letter ISO 639-1 code (`en`, `fr`…), sent as `language`. A `lang` property in the note replaces it. Empty = nothing sent: Refinr applies its own setting, then detects the language of the note. Needs Refinr 1.4.0 (ignored by older servers). |
 | Analysis timeout (seconds) | `1560` | How long the plugin waits for an analysis, a creation or a reassessment. The default covers the worst case of a Refinr server with default settings. Refinr may keep working after the plugin stops waiting. |
 
 The size limit of a note is read from Refinr (`maxContentChars`, 200,000 characters by default, title included): a
@@ -111,6 +131,14 @@ ribbon options; the plugin has no setting for it.
 - An analysis can take several minutes. You can close the window: a notice offers to reopen the preview when it is
   ready.
 
+### Output language
+
+The backlog and the verdict reasons are written in the language sent to Refinr: the note's `lang` property when it
+has one (for example `lang: en`), otherwise the **Default language** setting, otherwise nothing is sent and Refinr
+decides (its `refinr.llm.output-language` setting, then the language of the note). The same language is used for the
+preview, the creation from it and the reassessments. An invalid code is refused by Refinr with
+`language must be an ISO 639-1 code (e.g. fr, en)`, shown as is.
+
 ### Create the issues
 
 From the preview, choose **Create in {tracker}**, check the project and the counts, then confirm.
@@ -139,6 +167,12 @@ refinr:
       url: https://openproject.example.com/work_packages/152
       verdict: ai-ready
       reassessed: 2026-11-13T23:50:05+01:00   # set by "Reassess a story"
+    - title: Email the export to accounting
+      key: "153"
+      url: https://openproject.example.com/work_packages/153
+      verdict: ai-ready
+      verdictSource: human                    # set by "Validate a story"
+      validated: 2026-11-14T09:12:40+01:00
   failed: []
   history:                 # earlier creations from this note, oldest first
     - created: 2026-11-13T22:01:30+01:00
@@ -158,13 +192,14 @@ refinr:
 ```
 
 A block written during the real-world trial, after a second creation and a successful reassessment of story `"152"`
-(OpenProject keys are numbers, written as text): host and project anonymized, titles translated.
+(OpenProject keys are numbers, written as text): host and project anonymized, titles translated; story `"153"` and
+its validation were added to show the fields written by **Validate a story**.
 
 - `status: partial`: some items were not created (listed in `failed`). `status: unknown`: the plugin could not know
   the outcome (timeout, connection lost after sending): **check the tracker before trying again**.
 - `verdictSource: fallback` on a story (next to `verdict: validation-necessaire`): Refinr could not get a verdict
   (e.g. AI provider unavailable) and applied `validation-necessaire` by default. A successful reassessment of the
-  story removes it.
+  story removes it. `verdictSource: human`: you validated the story yourself (**Validate a story**).
 - A new creation moves the current entry to `history`; nothing is overwritten.
 - If the note was deleted or its frontmatter is invalid, nothing is written and the result can be copied as YAML.
 
@@ -178,20 +213,26 @@ of the description in Jira), computes a new verdict, and the plugin updates `ver
   reassessed from Refinr's web UI); the note is not changed.
 - A timeout does not mean failure: check the issue before trying again, a new attempt adds another comment.
 
+### Validate a story
+
+When you know a `validation-necessaire` story is ready (the open questions are settled elsewhere), run **Refinr:
+Validate a story**, choose the story and confirm. Refinr marks the issue `ai-ready` **without calling the AI** (it adds
+the verdict line to the issue and replaces the label), and the plugin sets `verdict: ai-ready`, `verdictSource: human`
+and `validated` in the note. Needs Refinr 1.4.0: an older server answers that it cannot validate a story.
+
 ## Limits
 
 - **One instance per tracker name**: before a reassessment the plugin checks that Refinr still uses the tracker
   recorded in the note, by its name only. Two Jira (or two OpenProject) instances are not told apart.
-- **Fallback verdicts are detected from Refinr's wording**: Refinr's REST answer has no flag for them yet
-  ([refinr#32](https://github.com/chams-bensalem/refinr/issues/32)). If the wording changes, such a story is shown as
-  an ordinary `validation-necessaire` (never as `ai-ready`).
-- **AI provider quota and rate limits**: when Refinr's AI provider is rate limited or out of quota, Refinr answers
-  `502 "The AI provider is unavailable"` (analysis, reassessment), or applies the fallback verdict at creation. Try
-  again later.
+- **Fallback verdicts**: read from `aiReadySource` with Refinr 1.4.0. With Refinr 1.3 they are detected from Refinr's
+  wording; if it changed, such a story would be shown as an ordinary `validation-necessaire` (never as `ai-ready`).
+- **AI provider quota and rate limits**: with Refinr 1.4.0, an analysis or a reassessment ends with a message saying
+  the AI provider is out of quota, rate limited or overloaded, and when to try again if Refinr knows it. Refinr 1.3
+  answers `502 "The AI provider is unavailable"`. At creation, Refinr applies the fallback verdict instead.
 - **Long operations cannot be cancelled**: when the plugin stops waiting, Refinr may still finish the work.
 - **Desktop only for now (Windows, macOS, Linux): mobile has not been tested yet.** Network calls, the secret storage
   and the layout of the windows have only been checked on desktop, and a phone cannot reach a Refinr server on
-  `localhost`. The plugin is therefore not offered on iOS and Android in 0.1.0.
+  `localhost`. The plugin is therefore not offered on iOS and Android.
 
 ## Releasing
 
