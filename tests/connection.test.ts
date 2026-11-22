@@ -96,6 +96,10 @@ describe('describeError', () => {
 		[{ kind: 'too-large', status: 413, detail: 'Document too long' }, 'Refinr refused the request: too large (HTTP 413): Document too long.'],
 		[{ kind: 'http', status: 502, detail: 'LLM provider unavailable' }, 'Refinr answered HTTP 502: LLM provider unavailable.'],
 		[{ kind: 'invalid-response', status: 200 }, 'Unexpected answer from http://localhost:8080 (HTTP 200): is this the URL of a Refinr server?'],
+		[{ kind: 'rate-limited', status: 503, retryAfterSeconds: 42 }, 'The AI provider of Refinr has reached its quota or rate limit (HTTP 503). Try again in 42 s.'],
+		[{ kind: 'rate-limited', status: 503, retryAfterSeconds: 3600, correlationId: 'c2' }, 'The AI provider of Refinr has reached its quota or rate limit (HTTP 503). Try again in 60 min. (correlation id c2)'],
+		[{ kind: 'overloaded', status: 503 }, 'The AI provider of Refinr is temporarily overloaded (HTTP 503). Try again later.'],
+		[{ kind: 'overloaded', status: 503, retryAfterSeconds: 86_400 }, 'The AI provider of Refinr is temporarily overloaded (HTTP 503). Try again in 24 h.'],
 	])('%j', (error, expected) => {
 		expect(describeError(error, BASE, 'check')).toBe(expected);
 	});

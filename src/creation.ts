@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Chams Bensalem
 // SPDX-License-Identifier: MIT
 import type { RefinrError } from './api/refinr-client';
-import { fallbackCause } from './verdict';
+import { isFallback } from './verdict';
 
 /**
  * Answer of `POST /api/v1/create-jira` (Refinr `BacklogController.creationResponse`): 200 complete, 207 partial, 502
@@ -80,7 +80,7 @@ export function parseCreation(json: unknown): CreationResult | null {
 					// Refinr's rule: only an explicit true is ai-ready.
 					verdict: story.aiReady === true ? 'ai-ready' : 'validation-necessaire',
 					reason: text(story.aiReadyReason),
-					fallback: story.aiReady !== true && fallbackCause(text(story.aiReadyReason)) !== null,
+					fallback: isFallback(story.aiReady, text(story.aiReadyReason), story.aiReadySource),
 				});
 			}
 		}
@@ -108,8 +108,11 @@ export function nothingCreated(error: RefinrError): boolean {
 			return true;
 		case 'http':
 			return error.status === 400;
+		// rate-limited / overloaded: create-jira never answers 503 (Refinr applies the fallback verdict), unknown to be safe
 		case 'timeout':
 		case 'invalid-response':
+		case 'rate-limited':
+		case 'overloaded':
 			return false;
 	}
 }

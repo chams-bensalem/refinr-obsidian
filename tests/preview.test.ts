@@ -105,6 +105,21 @@ describe('parsePreview', () => {
 		expect(preview?.totals).toMatchObject({ needsValidation: 0, noVerdict: 1 });
 	});
 
+	it('Refinr 1.4.0: aiReadySource decides, not the wording of the reason', () => {
+		const preview = parsePreview({
+			epics: [
+				{
+					name: 'E',
+					stories: [
+						{ title: 'A', aiReady: false, aiReadyReason: 'Model unavailable', aiReadySource: 'fallback' },
+						{ title: 'B', aiReady: false, aiReadyReason: 'verdict indisponible (x) : validation humaine necessaire', aiReadySource: 'model' },
+					],
+				},
+			],
+		});
+		expect(preview?.epics[0]?.stories.map((story) => story.verdict)).toEqual(['unknown', 'validation-necessaire']);
+	});
+
 	it('accepts missing optional fields', () => {
 		const preview = parsePreview({ epics: [{ stories: [{}] }] });
 		expect(preview?.epics[0]).toMatchObject({ name: '', labels: [], stories: [{ title: '', tasks: [], storyPoints: null }] });
