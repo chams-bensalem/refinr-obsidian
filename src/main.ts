@@ -26,6 +26,7 @@ import {
 import { nothingCreated } from './creation';
 import { providedTextLength } from './document';
 import { expandNote } from './embeds';
+import { outputLanguage } from './language';
 import { VaultNotes } from './obsidian/vault-notes';
 import { type DoneState, type FrontmatterOutcome, PreviewModal } from './preview-modal';
 import { type PendingStory, ReassessModal, StoryPicker } from './reassess-modal';
@@ -147,10 +148,12 @@ export default class RefinrPlugin extends Plugin {
 			return;
 		}
 		this.analyzing.add(file.path);
+		// Read once: the preview and the creation from it use the same language
+		const language = outputLanguage(this.frontmatter(file), this.settings.defaultLanguage);
 		const modal: PreviewModal = new PreviewModal(this.app, file.basename, {
 			existingRecord: () => recordSummary(this.frontmatter(file)),
 			create: (base, projectKey) => {
-				void this.createIssues(file, modal, base, projectKey);
+				void this.createIssues(file, modal, base, projectKey, language);
 			},
 			copy: (text) => {
 				void (async () => {
@@ -186,7 +189,7 @@ export default class RefinrPlugin extends Plugin {
 				return;
 			}
 			modal.setState({ kind: 'analyzing', chars, limit, warnings });
-			const result = await client.analyzePreview({ content: expansion.text, title: file.basename }, this.timeoutMs);
+			const result = await client.analyzePreview({ content: expansion.text, title: file.basename }, this.timeoutMs, language);
 			modal.setState(
 				result.ok
 					? {
@@ -217,7 +220,13 @@ export default class RefinrPlugin extends Plugin {
 	 * `create-jira` with the preview, then the `refinr` property: written as soon as `created[]` is not empty (whatever
 	 * the status code), as `unknown` when the outcome is unknown, never when nothing was created.
 	 */
-	private async createIssues(file: TFile, modal: PreviewModal, base: DoneState, projectKey: string): Promise<void> {
+	private async createIssues(
+		file: TFile,
+		modal: PreviewModal,
+		base: DoneState,
+		projectKey: string,
+		language: string | null,
+	): Promise<void> {
 		const tracker = base.tracker ?? '';
 		const running = this.busy.get(file.path);
 		const baseUrl = normalizeBaseUrl(this.settings.refinrUrl);
@@ -237,7 +246,7 @@ export default class RefinrPlugin extends Plugin {
 		this.busy.set(file.path, 'create');
 		try {
 			const meta: RecordMeta = { date: moment().format(), tracker, project: projectKey === '' ? null : projectKey };
-			const result = await this.client(baseUrl).createIssues(base.preview.raw, projectKey, this.timeoutMs);
+			const result = await this.client(baseUrl).createIssues(base.preview.raw, projectKey, this.timeoutMs, language);
 			if (result.ok) {
 				const record = recordFromCreation(result.value, meta);
 				const frontmatter: FrontmatterOutcome =
@@ -330,7 +339,8 @@ export default class RefinrPlugin extends Plugin {
 				return;
 			}
 			const tracker = current.value.name;
-			const result = await client.reassessStory(story.key, precision, this.timeoutMs);
+			const language = outputLanguage(this.frontmatter(file), this.settings.defaultLanguage);
+			const result = await client.reassessStory(story.key, precision, this.timeoutMs, language);
 			if (result.ok) {
 				const verdict = result.value.aiReady ? 'ai-ready' : 'validation-necessaire';
 				let found = false;

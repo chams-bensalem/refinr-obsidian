@@ -194,6 +194,22 @@ describe('analyzePreview', () => {
 		});
 	});
 
+	it('adds the output language to the body when there is one (Refinr 1.4.0)', async () => {
+		const transport = fakeTransport({ '/api/v1/analyze-preview': json(200, PREVIEW) });
+		await client(transport).analyzePreview({ content: '# Body', title: 'Spec' }, 60_000, 'en');
+		expect(transport.requests[0]?.body).toBe('{"content":"# Body","title":"Spec","language":"en"}');
+	});
+
+	it('shows the 400 of an invalid language with Refinr message', async () => {
+		const transport = fakeTransport({
+			'/api/v1/analyze-preview': json(400, { success: false, error: 'language must be an ISO 639-1 code (e.g. fr, en)' }),
+		});
+		await expect(client(transport).analyzePreview({ content: 'x', title: 't' }, 1000, 'english')).resolves.toEqual({
+			ok: false,
+			error: { kind: 'http', status: 400, detail: 'language must be an ISO 639-1 code (e.g. fr, en)' },
+		});
+	});
+
 	it('uses the analysis timeout, not the check timeout', async () => {
 		vi.useFakeTimers();
 		const never: HttpTransport = () => new Promise<HttpResponse>(() => undefined);
@@ -244,6 +260,13 @@ describe('createIssues', () => {
 		expect(transport.requests[0]).toMatchObject({ method: 'POST', body: JSON.stringify(EPICS), headers: { 'X-API-Key': KEY } });
 	});
 
+	it('adds the output language as a query parameter, with or without projectKey', async () => {
+		const both = fakeTransport({ '/api/v1/create-jira?projectKey=DEMO&language=en': json(200, CREATION) });
+		await expect(client(both).createIssues(EPICS, 'DEMO', 60_000, 'en')).resolves.toMatchObject({ ok: true });
+		const only = fakeTransport({ '/api/v1/create-jira?language=fr': json(200, CREATION) });
+		await expect(client(only).createIssues(EPICS, '', 60_000, 'fr')).resolves.toMatchObject({ ok: true });
+	});
+
 	it('omits projectKey for the default project', async () => {
 		const transport = fakeTransport({ '/api/v1/create-jira': json(200, CREATION) });
 		await expect(client(transport).createIssues(EPICS, '', 60_000)).resolves.toMatchObject({ ok: true });
@@ -280,6 +303,12 @@ describe('reassessStory', () => {
 			value: { issueKey: '#15', aiReady: true, reason: 'Now clear' },
 		});
 		expect(transport.requests[0]?.body).toBe('{"issueKey":"#15","precision":"CSV, UTF-8"}');
+	});
+
+	it('adds the output language to the body when there is one', async () => {
+		const transport = fakeTransport({ '/api/v1/reassess-story': json(200, { success: true, issueKey: '#15', aiReady: false }) });
+		await client(transport).reassessStory('#15', 'p', 1000, 'en');
+		expect(transport.requests[0]?.body).toBe('{"issueKey":"#15","precision":"p","language":"en"}');
 	});
 
 	it.each<[string, HttpResponse | Error, object]>([

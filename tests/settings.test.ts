@@ -24,6 +24,7 @@ describe('normalizeSettings', () => {
 				embedMaxDepth: 5,
 				embedMaxChars: 50000,
 				analysisTimeoutSeconds: 600,
+				defaultLanguage: ' en ',
 			}),
 		).toEqual({
 			refinrUrl: 'https://refinr.example.org',
@@ -32,6 +33,7 @@ describe('normalizeSettings', () => {
 			embedMaxDepth: 5,
 			embedMaxChars: 50000,
 			analysisTimeoutSeconds: 600,
+			defaultLanguage: 'en',
 		});
 	});
 
