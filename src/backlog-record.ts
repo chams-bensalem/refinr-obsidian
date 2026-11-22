@@ -16,10 +16,15 @@ export interface StoryRecord {
 	key: string;
 	url: string | null;
 	verdict: CreatedVerdict;
-	/** `fallback`: Refinr could not give a verdict (e.g. AI unavailable) and applied validation-necessaire by default. */
-	verdictSource?: 'fallback';
+	/**
+	 * `fallback`: Refinr could not give a verdict (e.g. AI unavailable) and applied validation-necessaire by default;
+	 * `human`: marked ai-ready by a person with "Validate a story" (no model call). Absent: verdict of the model.
+	 */
+	verdictSource?: 'fallback' | 'human';
 	/** Date of the last reassessment, when there was one. */
 	reassessed?: string;
+	/** Date of the human validation, when there was one. */
+	validated?: string;
 }
 
 export interface RefinrRecord {
@@ -162,6 +167,25 @@ export function applyReassessment(
 	// A reassessment is a real verdict from the model: no longer a fallback.
 	delete story.verdictSource;
 	story.reassessed = date;
+	return true;
+}
+
+/**
+ * Human validation of a story in the current record: `ai-ready`, `verdictSource: human` and `validated` (other fields
+ * kept). Returns false when the story is no longer in the record: nothing is changed then.
+ */
+export function applyValidation(frontmatter: Record<string, unknown>, key: string, date: string): boolean {
+	const record = frontmatter[RECORD_KEY];
+	if (!isRecord(record) || !Array.isArray(record.stories)) {
+		return false;
+	}
+	const story = record.stories.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.key === key);
+	if (story === undefined) {
+		return false;
+	}
+	story.verdict = 'ai-ready';
+	story.verdictSource = 'human';
+	story.validated = date;
 	return true;
 }
 

@@ -142,3 +142,84 @@ export class ReassessModal extends Modal {
 		}
 	}
 }
+
+export type ValidateState =
+	| { kind: 'confirm' }
+	| { kind: 'working' }
+	| { kind: 'done'; frontmatter: string; frontmatterOk: boolean }
+	| { kind: 'error'; message: string };
+
+/** Confirmation, then the result of a human validation (no model call: the person takes the decision). */
+export class ValidateModal extends Modal {
+	private state: ValidateState = { kind: 'confirm' };
+	private shown = false;
+
+	constructor(
+		app: App,
+		private readonly story: PendingStory,
+		private readonly tracker: string,
+		private readonly submit: () => void,
+	) {
+		super(app);
+	}
+
+	get isShown(): boolean {
+		return this.shown;
+	}
+
+	setState(state: ValidateState): void {
+		this.state = state;
+		if (this.shown) {
+			this.render();
+		}
+	}
+
+	onOpen(): void {
+		this.shown = true;
+		this.render();
+	}
+
+	onClose(): void {
+		this.shown = false;
+		this.contentEl.empty();
+	}
+
+	private render(): void {
+		const el = this.contentEl;
+		el.empty();
+		el.addClass('refinr-preview');
+		this.setTitle(`Validate ${this.story.key}`);
+		el.createEl('p', { cls: 'refinr-story-title', text: this.story.title === '' ? 'Untitled story' : this.story.title });
+		const state = this.state;
+		switch (state.kind) {
+			case 'confirm': {
+				el.createEl('p', {
+					text: `Mark this story ai-ready yourself, without asking the AI. Refinr writes the verdict in ${this.tracker} and replaces the validation-necessaire label.`,
+				});
+				const footer = el.createDiv({ cls: 'refinr-footer' });
+				const button = footer.createEl('button', { cls: 'mod-cta', text: 'Validate' });
+				button.addEventListener('click', () => {
+					// One click only: the state changes before the request is sent.
+					button.disabled = true;
+					this.setState({ kind: 'working' });
+					this.submit();
+				});
+				return;
+			}
+			case 'working':
+				el.createEl('p', { text: `Refinr is validating ${this.story.key}…` });
+				return;
+			case 'done': {
+				const line = el.createEl('p');
+				line.createSpan({ text: 'New verdict: ' });
+				line.createSpan({ cls: 'refinr-verdict refinr-verdict-ai-ready', text: 'ai-ready' });
+				line.createSpan({ text: ' (validated by you)' });
+				el.createEl('p', { cls: state.frontmatterOk ? 'refinr-muted' : 'refinr-warning', text: state.frontmatter });
+				return;
+			}
+			case 'error':
+				el.createEl('p', { cls: 'refinr-error', text: state.message });
+				return;
+		}
+	}
+}

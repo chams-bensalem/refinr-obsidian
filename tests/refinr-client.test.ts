@@ -370,6 +370,35 @@ describe('reassessStory', () => {
 	});
 });
 
+describe('validateStory (Refinr 1.4.0)', () => {
+	it('posts the key only, reads the human verdict', async () => {
+		const transport = fakeTransport({
+			'/api/v1/validate-story': json(200, {
+				success: true,
+				issueKey: '#15',
+				aiReady: true,
+				aiReadyReason: 'validee par un humain, sans appel au modele',
+				aiReadySource: 'human',
+			}),
+		});
+		await expect(client(transport, KEY).validateStory('#15', 1000)).resolves.toEqual({
+			ok: true,
+			value: { issueKey: '#15', aiReady: true, reason: 'validee par un humain, sans appel au modele', source: 'human' },
+		});
+		expect(transport.requests[0]).toMatchObject({ method: 'POST', body: '{"issueKey":"#15"}', headers: { 'X-API-Key': KEY } });
+	});
+
+	it('refuses an answer that is not ai-ready', async () => {
+		const transport = fakeTransport({ '/api/v1/validate-story': json(200, { success: true, issueKey: '#15', aiReady: false }) });
+		await expect(client(transport).validateStory('#15', 1000)).resolves.toMatchObject({ ok: false, error: { kind: 'invalid-response' } });
+	});
+
+	it('a Refinr older than 1.4.0 answers 404', async () => {
+		const transport = fakeTransport({ '/api/v1/validate-story': json(404, { error: 'Not Found' }) });
+		await expect(client(transport).validateStory('#15', 1000)).resolves.toMatchObject({ ok: false, error: { kind: 'http', status: 404 } });
+	});
+});
+
 describe('normalizeBaseUrl', () => {
 	it.each([
 		['http://localhost:8080', 'http://localhost:8080'],

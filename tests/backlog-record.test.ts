@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	applyReassessment,
+	applyValidation,
 	applyRecord,
 	pendingStories,
 	recordFromCreation,
@@ -189,6 +190,26 @@ describe('applyReassessment', () => {
 		const before = structuredClone(fm);
 		expect(applyReassessment(fm, '#99', 'ai-ready', 'd9')).toBe(false);
 		expect(applyReassessment({ status: 'draft' }, '#15', 'ai-ready', 'd9')).toBe(false);
+		expect(fm).toEqual(before);
+	});
+});
+
+describe('applyValidation', () => {
+	it('marks the story ai-ready by a human, with the date, nothing else changed', () => {
+		const fm = userFrontmatter();
+		applyRecord(fm, record('d1'));
+		expect(applyValidation(fm, '#15', 'd9')).toBe(true);
+		const stories = (fm.refinr as { stories: Record<string, unknown>[] }).stories;
+		expect(stories[1]).toEqual({ title: 'Email export', key: '#15', url: null, verdict: 'ai-ready', verdictSource: 'human', validated: 'd9' });
+		expect(fm.status).toBe('draft');
+		expect(pendingStories(fm)).toEqual([]);
+	});
+
+	it('a story removed from the note meanwhile: nothing changed', () => {
+		const fm = userFrontmatter();
+		applyRecord(fm, record('d1'));
+		const before = structuredClone(fm);
+		expect(applyValidation(fm, '#99', 'd9')).toBe(false);
 		expect(fm).toEqual(before);
 	});
 });

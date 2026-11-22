@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { type CreationResult, parseCreation } from '../creation';
 import { parsePreview, type Preview } from '../preview';
+import { type VerdictSource, verdictSource } from '../verdict';
 import { type HttpRequest, type HttpTransport, TimeoutError, withTimeout } from './http';
 
 /** Why a call to Refinr failed. Each kind maps to an actionable message (see `connection.ts`). */
@@ -62,6 +63,15 @@ export interface Reassessment {
 	issueKey: string;
 	aiReady: boolean;
 	reason: string;
+}
+
+/** `POST /api/v1/validate-story` (Refinr 1.4.0 or later): the story marked ai-ready by a person. */
+export interface Validation {
+	issueKey: string;
+	aiReady: boolean;
+	reason: string;
+	/** `human` from Refinr 1.4.0; null if Refinr sent no known value. */
+	source: VerdictSource | null;
 }
 
 export interface RefinrClientOptions {
@@ -152,6 +162,14 @@ export class RefinrClient {
 	reassessStory(issueKey: string, precision: string, timeoutMs: number, language: string | null = null): Promise<Result<Reassessment>> {
 		const body = language === null ? { issueKey, precision } : { issueKey, precision, language };
 		return this.send('POST', '/api/v1/reassess-story', JSON.stringify(body), timeoutMs, parseReassessment);
+	}
+
+	/**
+	 * `POST /api/v1/validate-story` (Refinr 1.4.0 or later): marks a story awaiting validation ai-ready on a human
+	 * decision, without any model call; Refinr writes the verdict line and the label in the tracker.
+	 */
+	validateStory(issueKey: string, timeoutMs: number): Promise<Result<Validation>> {
+		return this.send('POST', '/api/v1/validate-story', JSON.stringify({ issueKey }), timeoutMs, parseValidation);
 	}
 
 	private get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
@@ -294,6 +312,18 @@ function parseReassessment(json: unknown): Reassessment | null {
 		return null;
 	}
 	return { issueKey: json.issueKey, aiReady: json.aiReady, reason: typeof json.aiReadyReason === 'string' ? json.aiReadyReason : '' };
+}
+
+function parseValidation(json: unknown): Validation | null {
+	if (!isRecord(json) || typeof json.issueKey !== 'string' || json.aiReady !== true) {
+		return null;
+	}
+	return {
+		issueKey: json.issueKey,
+		aiReady: true,
+		reason: typeof json.aiReadyReason === 'string' ? json.aiReadyReason : '',
+		source: verdictSource(json.aiReadySource),
+	};
 }
 
 function parseTracker(json: unknown): TrackerInfo | null {
