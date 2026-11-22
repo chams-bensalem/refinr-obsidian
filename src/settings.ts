@@ -16,6 +16,11 @@ export interface RefinrSettings {
 	embedMaxChars: number;
 	/** How long the plugin waits for an analysis before giving up (Refinr may still be working). */
 	analysisTimeoutSeconds: number;
+	/**
+	 * Output language sent to Refinr (ISO 639-1 code, e.g. `en`), replaced by the note's `lang` property; empty = nothing
+	 * sent (Refinr applies its own setting, then detects the language of the note).
+	 */
+	defaultLanguage: string;
 }
 
 /**
@@ -32,6 +37,7 @@ export const DEFAULT_SETTINGS: Readonly<RefinrSettings> = {
 	embedMaxDepth: 3,
 	embedMaxChars: 100_000,
 	analysisTimeoutSeconds: DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
+	defaultLanguage: '',
 };
 
 export const SETTING_LIMITS = {
@@ -54,7 +60,14 @@ export function normalizeSettings(raw: unknown): RefinrSettings {
 			DEFAULT_SETTINGS.analysisTimeoutSeconds,
 			SETTING_LIMITS.analysisTimeoutSeconds,
 		),
+		defaultLanguage: text(data.defaultLanguage, DEFAULT_SETTINGS.defaultLanguage),
 	};
+}
+
+/** Inline error for the default language: empty, or two letters (Refinr checks the code itself and answers 400). */
+export function languageError(value: string): string | undefined {
+	const code = value.trim();
+	return code === '' || /^[A-Za-z]{2}$/.test(code) ? undefined : 'Enter a two-letter language code, for example en or fr, or leave empty.';
 }
 
 /** Inline error for the Refinr URL setting, or undefined when the URL is usable. */

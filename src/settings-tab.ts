@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { type App, PluginSettingTab, SecretComponent, type SettingDefinitionItem } from 'obsidian';
 import type RefinrPlugin from './main';
-import { DEFAULT_SETTINGS, integerError, normalizeSettings, type RefinrSettings, SETTING_LIMITS, urlError } from './settings';
+import { DEFAULT_SETTINGS, integerError, languageError, normalizeSettings, type RefinrSettings, SETTING_LIMITS, urlError } from './settings';
 
 type SettingKey = keyof RefinrSettings;
 
@@ -52,6 +52,14 @@ export class RefinrSettingTab extends PluginSettingTab {
 				name: 'Default project key',
 				desc: "Project where issues are created. Leave empty to use the Refinr server's default project.",
 				control: { type: 'text', key: 'defaultProjectKey' },
+			},
+			{
+				name: 'Default language',
+				desc:
+					'Language of the backlog and of the verdict reasons, as a two-letter code (for example en or fr). ' +
+					'A "lang" property in a note replaces it. Leave empty to let Refinr decide (its own setting, then the language of the note). Needs Refinr 1.4.0.',
+				aliases: ['lang', 'output language'],
+				control: { type: 'text', key: 'defaultLanguage', placeholder: 'en', validate: languageError },
 			},
 			{
 				type: 'group',

@@ -117,22 +117,32 @@ export class RefinrClient {
 	 * `POST /api/v1/analyze-preview` with a document provided as text. Can take minutes (language model): when
 	 * `timeoutMs` expires, the plugin stops waiting but Refinr may still be analyzing.
 	 */
-	analyzePreview(document: { content: string; title: string }, timeoutMs: number): Promise<Result<Preview>> {
-		return this.send('POST', '/api/v1/analyze-preview', JSON.stringify(document), timeoutMs, parsePreview);
+	analyzePreview(
+		document: { content: string; title: string },
+		timeoutMs: number,
+		language: string | null = null,
+	): Promise<Result<Preview>> {
+		const body = language === null ? document : { ...document, language };
+		return this.send('POST', '/api/v1/analyze-preview', JSON.stringify(body), timeoutMs, parsePreview);
 	}
 
 	/**
 	 * `POST /api/v1/create-jira` with the preview's `epics`, unchanged. The answer is read whatever its status when it
 	 * holds the creation lists (200, 207 and 502 do): what was created matters, not the status code.
 	 */
-	createIssues(epics: unknown[], projectKey: string, timeoutMs: number): Promise<Result<CreationResult>> {
-		const query = projectKey === '' ? '' : `?projectKey=${encodeURIComponent(projectKey)}`;
+	createIssues(epics: unknown[], projectKey: string, timeoutMs: number, language: string | null = null): Promise<Result<CreationResult>> {
+		const params = [
+			...(projectKey === '' ? [] : [`projectKey=${encodeURIComponent(projectKey)}`]),
+			...(language === null ? [] : [`language=${encodeURIComponent(language)}`]),
+		];
+		const query = params.length === 0 ? '' : `?${params.join('&')}`;
 		return this.send('POST', `/api/v1/create-jira${query}`, JSON.stringify(epics), timeoutMs, parseCreation, true);
 	}
 
 	/** `POST /api/v1/reassess-story`: calls the language model, then updates the issue (comment + verdict). */
-	reassessStory(issueKey: string, precision: string, timeoutMs: number): Promise<Result<Reassessment>> {
-		return this.send('POST', '/api/v1/reassess-story', JSON.stringify({ issueKey, precision }), timeoutMs, parseReassessment);
+	reassessStory(issueKey: string, precision: string, timeoutMs: number, language: string | null = null): Promise<Result<Reassessment>> {
+		const body = language === null ? { issueKey, precision } : { issueKey, precision, language };
+		return this.send('POST', '/api/v1/reassess-story', JSON.stringify(body), timeoutMs, parseReassessment);
 	}
 
 	private get<T>(path: string, parse: (json: unknown) => T | null): Promise<Result<T>> {
