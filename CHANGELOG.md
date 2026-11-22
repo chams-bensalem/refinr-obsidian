@@ -26,6 +26,9 @@ Needs **Refinr 1.3.0** or later; the new features need **Refinr 1.4.0** (with Re
   reason is still recognized for Refinr 1.3 and older.
 - README: installation from the community catalog first, then manual; clipboard use declared; Refinr version needed
   per feature.
+- Dates written in the note (`created`, `reassessed`, `validated`) no longer come from Obsidian's `moment`, untyped
+  for the community catalog review: same format (`2026-11-13T22:10:50+01:00`), the 6 warnings about untyped values
+  (calls, member accesses, assignment, argument) are gone.
 - Lint: the `no-unsafe-*` rules (untyped `any` in calls, member accesses, assignments, arguments, returns) are set to
   error explicitly, so that CI blocks them.
 
