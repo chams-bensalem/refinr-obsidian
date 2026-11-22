@@ -1,7 +1,7 @@
 {
 	"id": "refinr",
 	"name": "Refinr",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"minAppVersion": "1.13.0",
 	"description": "Turn the active note into an agent-ready backlog (Epics, Stories, Sub-tasks) in Jira or OpenProject, via Refinr.",
 	"author": "Chams Bensalem",
